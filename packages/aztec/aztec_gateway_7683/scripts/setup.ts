@@ -1,6 +1,9 @@
 import { Contract, createLogger, EthAddress, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
 import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import {
+  TokenContract,
+  TokenContractArtifact,
+} from "@defi-wonderland/aztec-standards/current/artifacts/artifacts/Token.js"
 
 import { getSponsoredFPCInstance } from "./fpc.js"
 import { getPXEs, getRandomWallet } from "./utils.js"
@@ -50,12 +53,14 @@ async function main(): Promise<void> {
     })
     .deployed()
 
-  const token = await Contract.deploy(deployer, TokenContractArtifact, [
-    deployer.getAddress(),
+  const token = await TokenContract.deployWithOpts(
+    { wallet: deployer, method: "constructor_with_minter" },
     "Wrapped Ethereum",
     "WETH",
     18,
-  ])
+    deployer.getAddress(),
+    deployer.getAddress(),
+  )
     .send({ fee: { paymentMethod } })
     .deployed()
 

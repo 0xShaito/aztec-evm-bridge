@@ -6,7 +6,7 @@ import { getSponsoredFPCAddress } from "./fpc.js"
 import { getPxe, getWalletFromSecretKey } from "./utils.js"
 import { AztecGateway7683ContractArtifact } from "../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../src/ts/test/OrderData.js"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { TokenContractArtifact } from "@defi-wonderland/aztec-standards/current/artifacts/artifacts/Token.js"
 
 const ORDER_DATA_TYPE = "0xf00c3bf60c73eb97097f1c9835537da014e0b755fe94b25d7ac8401df66716a0"
 
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   const nonce = Fr.random()
   const witness = await wallet.createAuthWit({
     caller: gateway.address,
-    action: token.methods.transfer_to_public(wallet.getAddress(), gateway.address, amountIn, nonce),
+    action: token.methods.transfer_private_to_public(wallet.getAddress(), gateway.address, amountIn, nonce),
   })
 
   const orderData = new OrderData({

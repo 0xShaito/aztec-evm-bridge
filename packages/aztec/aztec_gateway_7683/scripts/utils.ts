@@ -64,6 +64,8 @@ export const getRandomWallet = async ({ paymentMethod, pxe }: { paymentMethod: F
   const secretKey = Fr.random()
   const salt = Fr.random()
   const schnorrAccount = await getSchnorrAccount(pxe, secretKey, deriveSigningKey(secretKey), salt)
+  // Pre-register the account to ensure PXE has tags before any private simulation
+  await pxe.registerAccount(secretKey, (await schnorrAccount.getCompleteAddress()).partialAddress)
   await schnorrAccount.deploy({ fee: { paymentMethod } }).wait()
   return await schnorrAccount.getWallet()
 }

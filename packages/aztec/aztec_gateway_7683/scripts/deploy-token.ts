@@ -1,5 +1,6 @@
 import { createLogger, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
-import { TokenContract } from "@aztec/noir-contracts.js/Token"
+import { Contract } from "@aztec/aztec.js"
+import { TokenContractArtifact } from "@defi-wonderland/aztec-standards/current/artifacts/artifacts/Token.js"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
 import { getPxe, getWalletFromSecretKey } from "./utils.js"
@@ -26,7 +27,12 @@ const main = async () => {
     deploy: false,
   })
 
-  const token = await TokenContract.deploy(wallet, wallet.getAddress(), tokenName, tokenSymbol, parseInt(tokenDecimals))
+  const token = await Contract.deploy(
+    wallet,
+    TokenContractArtifact,
+    [tokenName, tokenSymbol, parseInt(tokenDecimals), wallet.getAddress(), wallet.getAddress()],
+    "constructor_with_minter",
+  )
     .send({
       fee: { paymentMethod },
     })
@@ -36,7 +42,7 @@ const main = async () => {
 
   await pxe.registerContract({
     instance: token.instance,
-    artifact: TokenContract.artifact,
+    artifact: TokenContractArtifact,
   })
 
   logger.info(`token deployed: ${token.address.toString()}`)

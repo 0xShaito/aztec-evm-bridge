@@ -10,7 +10,7 @@ import {
 } from "@aztec/aztec.js"
 import { createPublicClient, hexToBytes, http, padHex } from "viem"
 import * as chains from "viem/chains"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { TokenContractArtifact } from "@defi-wonderland/aztec-standards/current/artifacts/artifacts/Token.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 import { getSponsoredFPCAddress, getSponsoredFPCInstance } from "../fpc.js"
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
       authWitnesses: [
         await aztecWallet.createAuthWit({
           caller: gateway.address,
-          action: token.methods.transfer_to_public(aztecWallet.getAddress(), gateway.address, amount, nonce),
+          action: token.methods.transfer_private_to_public(aztecWallet.getAddress(), gateway.address, amount, nonce),
         }),
       ],
     })

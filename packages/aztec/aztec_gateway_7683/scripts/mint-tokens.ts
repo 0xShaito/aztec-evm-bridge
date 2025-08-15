@@ -1,5 +1,8 @@
 import { AztecAddress, createLogger, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
-import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import {
+  TokenContract,
+  TokenContractArtifact,
+} from "@defi-wonderland/aztec-standards/current/artifacts/artifacts/Token.js"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
 import { getNode, getPxe, getWalletFromSecretKey } from "./utils.js"

@@ -1,15 +1,18 @@
-import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract } from "@aztec/aztec.js"
+import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract, sleep } from "@aztec/aztec.js"
 import { spawn } from "child_process"
 import { createEthereumChain, createExtendedL1Client, RollupContract } from "@aztec/ethereum"
 import { hexToBytes, padHex } from "viem"
 import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import {
+  TokenContract,
+  TokenContractArtifact,
+} from "@defi-wonderland/aztec-standards/current/artifacts/artifacts/Token.js"
 
 import { parseFilledLog, parseOpenLog, parseResolvedCrossChainOrder, parseSettledLog } from "./utils.js"
 import { AztecGateway7683Contract, AztecGateway7683ContractArtifact } from "../../artifacts/AztecGateway7683.js"
 import { getRandomWallet, getPXEs } from "../../../scripts/utils.js"
-import { getSponsoredFPCInstance } from "../../../scripts/fpc.js"
+import { getSponsoredFPCInstance, setupSponsoredFPC } from "../../../scripts/fpc.js"
 import { OrderData } from "./OrderData.js"
 
 const MNEMONIC = "test test test test test test test test test test test junk"
@@ -52,6 +55,8 @@ const setup = async (pxes: PXE[]) => {
   const filler = await getRandomWallet({ paymentMethod, pxe: pxe2 })
   const deployer = await getRandomWallet({ paymentMethod, pxe: pxe3 })
 
+  await setupSponsoredFPC(deployer, console.log)
+
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
 
@@ -70,7 +75,12 @@ const setup = async (pxes: PXE[]) => {
   await filler.registerSender(gateway.address)
   await deployer.registerSender(gateway.address)
 
-  const token = await Contract.deploy(deployer, TokenContractArtifact, [deployer.getAddress(), "TOKEN", "TKN", 18])
+  const token = await Contract.deploy(
+    deployer,
+    TokenContractArtifact,
+    ["TOKEN", "TKN", 18, 0n, deployer.getAddress(), deployer.getAddress()],
+    "constructor_with_initial_supply",
+  )
     .send({ fee: { paymentMethod } })
     .deployed()
 
@@ -118,7 +128,7 @@ const setup = async (pxes: PXE[]) => {
 // NOTE: before running the tests comment all occurences of context.consume_l1_to_l2_message
 describe("AztecGateway7683", () => {
   let pxes: PXE[]
-  let sandboxInstance
+  let sandboxInstance: ReturnType<typeof spawn> | undefined
   let skipSandbox: boolean
   let publicClient: any
   let version: bigint
@@ -142,8 +152,8 @@ describe("AztecGateway7683", () => {
   })
 
   afterAll(async () => {
-    if (!skipSandbox) {
-      sandboxInstance!.kill("SIGINT")
+    if (!skipSandbox && sandboxInstance) {
+      sandboxInstance.kill("SIGINT")
     }
   })
 
@@ -160,7 +170,7 @@ describe("AztecGateway7683", () => {
           caller: gateway.address,
           action: token
             .withWallet(filler)
-            .methods.transfer_in_public(user.getAddress(), gateway.address, amountIn, nonce),
+            .methods.transfer_public_to_public(user.getAddress(), gateway.address, amountIn, nonce),
         },
         true,
       )
@@ -258,7 +268,9 @@ describe("AztecGateway7683", () => {
     const nonce = Fr.random()
     const witness = await user.createAuthWit({
       caller: gateway.address,
-      action: token.withWallet(user).methods.transfer_to_public(user.getAddress(), gateway.address, amountIn, nonce),
+      action: token
+        .withWallet(user)
+        .methods.transfer_private_to_public(user.getAddress(), gateway.address, amountIn, nonce),
     })
 
     const orderData = new OrderData({
@@ -373,7 +385,7 @@ describe("AztecGateway7683", () => {
           caller: gateway.address,
           action: token
             .withWallet(filler)
-            .methods.transfer_in_public(filler.getAddress(), user.getAddress(), amountOut, nonce),
+            .methods.transfer_public_to_public(filler.getAddress(), user.getAddress(), amountOut, nonce),
         },
         true,
       )
@@ -457,7 +469,7 @@ describe("AztecGateway7683", () => {
       caller: gateway.address,
       action: token
         .withWallet(filler)
-        .methods.transfer_to_public(filler.getAddress(), gateway.address, amountOut, nonce),
+        .methods.transfer_private_to_public(filler.getAddress(), gateway.address, amountOut, nonce),
     })
 
     const fromBlock = await pxe1.getBlockNumber()
@@ -535,7 +547,7 @@ describe("AztecGateway7683", () => {
           caller: gateway.address,
           action: token
             .withWallet(filler)
-            .methods.transfer_in_public(user.getAddress(), gateway.address, amountIn, nonce),
+            .methods.transfer_public_to_public(user.getAddress(), gateway.address, amountIn, nonce),
         },
         true,
       )
@@ -594,7 +606,9 @@ describe("AztecGateway7683", () => {
     const nonce = Fr.random()
     const witness = await user.createAuthWit({
       caller: gateway.address,
-      action: token.withWallet(user).methods.transfer_to_public(user.getAddress(), gateway.address, amountIn, nonce),
+      action: token
+        .withWallet(user)
+        .methods.transfer_private_to_public(user.getAddress(), gateway.address, amountIn, nonce),
     })
 
     const orderData = new OrderData({
