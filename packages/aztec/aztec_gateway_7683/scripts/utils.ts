@@ -5,6 +5,7 @@ import { getSchnorrAccount, SchnorrAccountContractArtifact } from "@aztec/accoun
 import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { getSponsoredFPCInstance } from "./fpc.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { rmSync } from "fs"
 
 export const getPXEs = async (names: string[]): Promise<PXE[]> => {
   const url = "http://localhost:8080"
@@ -17,6 +18,9 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
   }
 
   const pxes: PXE[] = []
+
+  // Delete the previous store dir before creating a new one
+  rmSync(`store`, { recursive: true, force: true })
   for (const name of names) {
     const store = await createStore(name, {
       dataDirectory: "store",
@@ -26,6 +30,7 @@ export const getPXEs = async (names: string[]): Promise<PXE[]> => {
       store,
       useLogSuffix: true,
     })
+    console.log(`${name} info`, await pxe.getPXEInfo())
     await waitForPXE(pxe)
     pxes.push(pxe)
   }

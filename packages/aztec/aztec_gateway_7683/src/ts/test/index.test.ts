@@ -1,4 +1,4 @@
-import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract, sleep } from "@aztec/aztec.js"
+import { Fr, PXE, EthAddress, SponsoredFeePaymentMethod, Contract, AztecAddress } from "@aztec/aztec.js"
 import { spawn } from "child_process"
 import { createEthereumChain, createExtendedL1Client, RollupContract } from "@aztec/ethereum"
 import { hexToBytes, padHex } from "viem"
@@ -75,14 +75,23 @@ const setup = async (pxes: PXE[]) => {
   await filler.registerSender(gateway.address)
   await deployer.registerSender(gateway.address)
 
-  const token = await Contract.deploy(
-    deployer,
-    TokenContractArtifact,
-    ["TOKEN", "TKN", 18, 0n, deployer.getAddress(), deployer.getAddress()],
-    "constructor_with_initial_supply",
+  const token = await TokenContract.deployWithOpts(
+    {
+      wallet: deployer,
+      method: "constructor_with_minter",
+    },
+    "TOKEN",
+    "TKN",
+    18,
+    deployer.getAddress(),
+    AztecAddress.ZERO,
   )
-    .send({ fee: { paymentMethod } })
+    .send({
+      universalDeploy: true,
+      fee: { paymentMethod },
+    })
     .deployed()
+  console.log("token deployed", token.address)
 
   for (const pxe of pxes) {
     await pxe.registerContract({
@@ -96,6 +105,9 @@ const setup = async (pxes: PXE[]) => {
   }
 
   const amount = 1000n * 10n ** 18n
+
+  console.log("minting to user")
+  console.log(deployer.getAddress(), user.getAddress(), amount)
   await token
     .withWallet(deployer)
     .methods.mint_to_private(deployer.getAddress(), user.getAddress(), amount)
@@ -117,6 +129,7 @@ const setup = async (pxes: PXE[]) => {
     .send({ fee: { paymentMethod } })
     .wait()
 
+  console.log("done minting")
   return {
     wallets: [user, filler, deployer],
     gateway,
@@ -159,6 +172,7 @@ describe("AztecGateway7683", () => {
 
   it("should open a public order and settle", async () => {
     const [pxe1] = pxes
+
     const { token, gateway, wallets, paymentMethod } = await setup(pxes)
     const [user, filler] = wallets
 
@@ -214,6 +228,8 @@ describe("AztecGateway7683", () => {
       contractAddress: gateway.address,
     })
 
+    console.log(logs)
+
     const { resolvedOrder } = parseOpenLog(logs[0].log.fields, logs[1].log.fields)
     const parsedResolvedCrossChainOrder = parseResolvedCrossChainOrder(resolvedOrder)
     expect(parsedResolvedCrossChainOrder.orderId).toBe(orderId.toString())
@@ -235,6 +251,12 @@ describe("AztecGateway7683", () => {
     expect(parsedResolvedCrossChainOrder.user).toBe(user.getAddress().toString())
 
     const balancePre = await token.methods.balance_of_public(filler.getAddress()).simulate()
+    console.log({
+      orderId: parsedResolvedCrossChainOrder.orderId,
+      orderData: orderData.encode(),
+      fillerData: filler.getAddress().toString(),
+      messageLeafIndex: 0n,
+    })
     await gateway
       .withWallet(filler)
       .methods.settle(
