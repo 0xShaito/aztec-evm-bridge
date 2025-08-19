@@ -55,8 +55,6 @@ const setup = async (pxes: PXE[]) => {
   const filler = await getRandomWallet({ paymentMethod, pxe: pxe2 })
   const deployer = await getRandomWallet({ paymentMethod, pxe: pxe3 })
 
-  await setupSponsoredFPC(deployer, console.log)
-
   await user.registerSender(deployer.getAddress())
   await filler.registerSender(deployer.getAddress())
 
