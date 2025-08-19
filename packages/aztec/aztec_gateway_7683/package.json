@@ -26,7 +26,7 @@
     "@aztec/noir-contracts.js": "1.2.1",
     "@aztec/pxe": "1.2.1",
     "@aztec/stdlib": "1.2.1",
-    "@defi-wonderland/aztec-standards": "0.0.0-83476cda",
+    "@defi-wonderland/aztec-standards": "1.2.1",
     "viem": "^2.23.13"
   },
   "devDependencies": {
