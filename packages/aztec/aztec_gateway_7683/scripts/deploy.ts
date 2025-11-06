@@ -1,8 +1,11 @@
 import { AztecGateway7683Contract } from "../src/artifacts/AztecGateway7683.js"
-import { createLogger, EthAddress, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { createLogger } from "@aztec/foundation/log"
+import { EthAddress } from "@aztec/aztec.js/addresses"
+import { Fr } from "@aztec/aztec.js/fields"
+import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
-import { getPxe, getWalletFromSecretKey } from "./utils.js"
+import { getTestWallet, addAccountWithSecretKey } from "./utils.js"
 
 const [
   ,
@@ -12,35 +15,50 @@ const [
   l2Gateway7683Address,
   l2Gateway7683Domain,
   forwarderAddress,
-  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://devnet.aztec-labs.com",
+  deployWallet = "false",
 ] = process.argv
 
 const main = async () => {
   const logger = createLogger("deploy")
-  const pxe = await getPxe(rpcUrl)
+  logger.info("Starting deployment...")
+
+  const wallet = await getTestWallet(rpcUrl)
+
+  logger.info("PXE created")
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
-  const wallet = await getWalletFromSecretKey({
+  logger.info("Payment method created")
+
+  const account = await addAccountWithSecretKey({
     secretKey: aztecSecretKey,
     salt: aztecSalt,
-    pxe,
+    testWallet: wallet,
     paymentMethod,
-    deploy: false,
+    deploy: deployWallet === "true",
   })
+  logger.info("Wallet ready")
 
-  const gateway = await AztecGateway7683Contract.deploy(
+  logger.info("Deploying gateway contract...")
+  const deployMethod = AztecGateway7683Contract.deploy(
     wallet,
     EthAddress.fromString(l2Gateway7683Address),
     parseInt(l2Gateway7683Domain),
     EthAddress.fromString(forwarderAddress),
   )
+
+  const gateway = await deployMethod
     .send({
+      from: account.getAddress(),
+      contractAddressSalt: Fr.random(),
+      universalDeploy: true,
       fee: { paymentMethod },
     })
     .deployed({
       timeout: 120000,
     })
 
-  await pxe.registerContract({
+  logger.info("Gateway deployed, registering...")
+  await wallet.registerContract({
     instance: gateway.instance,
     artifact: AztecGateway7683Contract.artifact,
   })

@@ -1,13 +1,17 @@
 import "dotenv/config"
-import { AztecAddress, Contract, createLogger, Fr, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { createLogger } from "@aztec/foundation/log"
+import { Fr } from "@aztec/aztec.js/fields"
+import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee"
 import { hexToBytes, padHex } from "viem"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
-import { getPxe, getWalletFromSecretKey } from "./utils.js"
-import { AztecGateway7683ContractArtifact } from "../src/artifacts/AztecGateway7683.js"
+import { getTestWallet, addAccountWithSecretKey, getNode } from "./utils.js"
+import { AztecGateway7683Contract } from "../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../src/ts/test/OrderData.js"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { TokenContract } from "@aztec/noir-contracts.js/Token"
 import { poseidon2Hash } from "@aztec/foundation/crypto"
+import { ContractInstanceWithAddress } from "@aztec/aztec.js/contracts"
 
 const [
   ,
@@ -19,27 +23,45 @@ const [
   l2EvmTokenAddress,
   l2Gateway7683Domain,
   fillerAddress,
-  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://devnet.aztec-labs.com",
 ] = process.argv
 
 async function main(): Promise<void> {
   const logger = createLogger("fill-private")
-  const pxe = await getPxe(rpcUrl)
+  const wallet = await getTestWallet(rpcUrl)
+  const node = getNode(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
-  const wallet = await getWalletFromSecretKey({
+  const account = await addAccountWithSecretKey({
     secretKey: aztecSecretKey,
     salt: aztecSalt,
-    pxe,
+    testWallet: wallet,
   })
 
-  await wallet.registerSender(AztecAddress.fromString(aztecGateway7683Address))
+  // Register the gateway contract
+  const gatewayInstance = await node.getContract(AztecAddress.fromString(aztecGateway7683Address))
+  if (!gatewayInstance) {
+    throw new Error(`Gateway contract instance not found for address ${aztecGateway7683Address}`)
+  }
 
-  const gateway = await Contract.at(
-    AztecAddress.fromString(aztecGateway7683Address),
-    AztecGateway7683ContractArtifact,
-    wallet,
-  )
-  const token = await Contract.at(AztecAddress.fromString(aztecTokenAddress), TokenContractArtifact, wallet)
+  await wallet.registerContract({
+    instance: gatewayInstance as ContractInstanceWithAddress,
+    artifact: AztecGateway7683Contract.artifact,
+  })
+
+  const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(aztecGateway7683Address), wallet)
+
+  // Register the token contract by fetching instance from node
+  const tokenInstance = await node.getContract(AztecAddress.fromString(aztecTokenAddress))
+  if (!tokenInstance) {
+    throw new Error(`Token contract instance not found for address ${aztecTokenAddress}`)
+  }
+
+  await wallet.registerContract({
+    instance: tokenInstance as ContractInstanceWithAddress,
+    artifact: TokenContract.artifact,
+  })
+
+  const token = await TokenContract.at(AztecAddress.fromString(aztecTokenAddress), wallet)
 
   const amountOut = 100n
   const nonce = Fr.random()
@@ -64,10 +86,14 @@ async function main(): Promise<void> {
 
   const orderId = await orderData.id()
 
-  const witness = await wallet.createAuthWit({
+  console.log(`Filling order with ID: ${orderId.toString()}`)
+
+  const witness = await account.createAuthWit({
     caller: gateway.address,
-    action: token.methods.transfer_to_public(wallet.getAddress(), gateway.address, amountOut, nonce),
-  })
+    action: token.methods.transfer_to_public(account.getAddress(), gateway.address, amountOut, nonce),
+  } as any)
+
+  console.log(`Witness created for filling order ID: ${orderId.toString()}`)
 
   const receipt = await gateway.methods
     .fill_private(
@@ -79,6 +105,7 @@ async function main(): Promise<void> {
       authWitnesses: [witness],
     })
     .send({
+      from: account.getAddress(),
       fee: { paymentMethod },
     })
     .wait({
