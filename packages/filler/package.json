@@ -7,6 +7,9 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "dev": " NODE_NO_WARNINGS=1 node --loader ts-node/esm src/index.ts",
+    "mongo:start": "docker start aztec-filler-mongo 2>/dev/null || docker run -d --name aztec-filler-mongo -p 27017:27017 -v $(pwd)/.mongo-data:/data/db mongo:latest",
+    "mongo:stop": "docker stop aztec-filler-mongo",
+    "mongo:remove": "docker stop aztec-filler-mongo 2>/dev/null && docker rm aztec-filler-mongo",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{js,json,md,sol,ts,yml}\""
@@ -15,14 +18,15 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "@aztec/accounts": "1.1.3",
-    "@aztec/aztec.js": "1.1.3",
-    "@aztec/kv-store": "1.1.3",
-    "@aztec/noir-contracts.js": "1.1.3",
-    "@aztec/pxe": "1.1.3",
+    "@aztec/accounts": "3.0.0-devnet.2",
+    "@aztec/aztec.js": "3.0.0-devnet.2",
+    "@aztec/kv-store": "3.0.0-devnet.2",
+    "@aztec/noir-contracts.js": "3.0.0-devnet.2",
+    "@aztec/pxe": "3.0.0-devnet.2",
+    "@aztec/stdlib": "3.0.0-devnet.2",
     "@chainsafe/persistent-merkle-tree": "^1.1.0",
     "@chainsafe/ssz": "^1.2.0",
-    "@lodestar/types": "1.30.0",
+    "@lodestar/types": "^1.35.0",
     "async-mutex": "^0.5.0",
     "dotenv": "^16.4.7",
     "mongodb": "^6.15.0",
@@ -33,5 +37,9 @@
     "prettier": "^3.5.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
+  },
+  "resolutions": {
+    "jackspeak": "2.1.1",
+    "@aztec/foundation": "3.0.0-devnet.2"
   }
 }

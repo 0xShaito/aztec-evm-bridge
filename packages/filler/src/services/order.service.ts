@@ -1,5 +1,6 @@
 import { erc20Abi, padHex, sliceHex } from "viem"
-import { AztecAddress, Fr } from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { Fr } from "@aztec/aztec.js/fields"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { Mutex } from "async-mutex"
 import { waitForTransactionReceipt } from "viem/actions"
@@ -18,13 +19,13 @@ import BaseService from "./base.service.js"
 import { hexToUintArray } from "../utils/bytes.js"
 
 import type { Chain, Log } from "viem"
-import type { AccountWalletWithSecretKey } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./base.service.js"
 import type MultiClient from "../MultiClient.js"
 import type { ResolvedOrder } from "../types.js"
 
 export type OrderServiceOpts = BaseServiceOpts & {
-  aztecWallet: AccountWalletWithSecretKey
+  aztecWallet: any
+  aztecAccount: any
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
@@ -32,7 +33,8 @@ export type OrderServiceOpts = BaseServiceOpts & {
 }
 
 class OrderService extends BaseService {
-  aztecWallet: AccountWalletWithSecretKey
+  aztecWallet: any
+  aztecAccount: any
   aztecGatewayAddress: `0x${string}`
   evmMultiClient: MultiClient
   l2EvmChain: Chain
@@ -44,6 +46,7 @@ class OrderService extends BaseService {
     super(opts)
 
     this.aztecWallet = opts.aztecWallet
+    this.aztecAccount = opts.aztecAccount
     this.evmMultiClient = opts.evmMultiClient
     this.aztecGatewayAddress = opts.aztecGatewayAddress
     this.l2EvmGatewayAddress = opts.l2EvmGatewayAddress
@@ -80,7 +83,11 @@ class OrderService extends BaseService {
 
       const orderIds = orders.map(({ orderId }) => orderId)
       const newOrdersStatus = await Promise.all(
-        orderIds.map((orderId) => gateway.methods.get_order_status(Fr.fromHexString(orderId)).simulate()),
+        orderIds.map((orderId) =>
+          gateway.methods
+            .get_order_status(Fr.fromHexString(orderId))
+            .simulate({ from: this.aztecAccount.getAddress() }),
+        ),
       )
 
       const filledOrderIds = orderIds.filter((_, index) => newOrdersStatus[index] === ORDER_FILLED)
@@ -167,7 +174,7 @@ class OrderService extends BaseService {
       await waitForTransactionReceipt(l2EvmClient, { hash: txHash })
       this.logger.info(`tokens approved. ${this.l2EvmChain.name}:${txHash}. filling the order ...`)
 
-      const fillerData = this.aztecWallet.getAddress().toString()
+      const fillerData = this.aztecAccount.getAddress().toString()
       // @ts-ignore
       txHash = await l2EvmClient.writeContract({
         abi: l2Gateway7683Abi,
@@ -236,27 +243,34 @@ class OrderService extends BaseService {
           artifact: TokenContractArtifact,
         })
       } catch (err) {
+        console.log("Error occurred while registering token contract:")
         this.logger.error(err)
       }
+
+      console.log("Contracts registered. Preparing to fill order...")
 
       const [token, aztecGateway] = await Promise.all([
         TokenContract.at(AztecAddress.fromString(maxSpentToken), this.aztecWallet),
         AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), this.aztecWallet),
       ])
 
+      console.log("Preparing to fill order:", orderId)
+
       const orderType = `0x${originData.slice(538, 540)}`
       const nextOrderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_FILLED_PRIVATELY : ORDER_STATUS_FILLED
       const fillerData = padHex(this.evmMultiClient.getClientByChain(this.l2EvmChain).account!.address)
+
+      console.log("Filler data prepared:", fillerData)
 
       let receipt
       const paymentMethod = await getPaymentMethod()
       const nonce = Fr.fromHexString(`0x${originData.slice(386, 450)}`)
       if (nextOrderStatus === ORDER_STATUS_FILLED_PRIVATELY) {
         this.logger.info(`creating authwit to fill the order ${orderId} ...`)
-        const witness = await this.aztecWallet.createAuthWit({
+        const witness = await this.aztecAccount.createAuthWit({
           caller: AztecAddress.fromString(this.aztecGatewayAddress),
           action: token.methods.transfer_to_public(
-            this.aztecWallet.getAddress(),
+            this.aztecAccount.getAddress(),
             AztecAddress.fromString(this.aztecGatewayAddress),
             maxSpentAmount,
             nonce,
@@ -269,6 +283,7 @@ class OrderService extends BaseService {
             authWitnesses: [witness],
           })
           .send({
+            from: this.aztecAccount.getAddress(),
             fee: { paymentMethod },
           })
           .wait({
@@ -278,11 +293,11 @@ class OrderService extends BaseService {
         this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
         const recipient = `0x${originData.slice(66, 66 + 64)}`
         // @ts-ignore
-        const res = await this.aztecWallet.setPublicAuthWit(
+        const res = await this.aztecAccount.setPublicAuthWit(
           {
             caller: AztecAddress.fromString(this.aztecGatewayAddress),
             action: token.methods.transfer_in_public(
-              this.aztecWallet.getAddress(),
+              this.aztecAccount.getAddress(),
               AztecAddress.fromString(recipient),
               maxSpentAmount,
               nonce,
@@ -290,16 +305,16 @@ class OrderService extends BaseService {
           },
           true,
         )
-        await res.send({ fee: { paymentMethod } }).wait({
+        await res.send({ from: this.aztecAccount.getAddress(), fee: { paymentMethod } }).wait({
           timeout: 120000,
         })
 
         this.logger.info(`filling the public order ${orderId} ...`)
 
-        receipt = await aztecGateway
-          .withWallet(this.aztecWallet)
-          .methods.fill(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
+        receipt = await aztecGateway.methods
+          .fill(hexToUintArray(orderId), hexToUintArray(originData), hexToUintArray(fillerData))
           .send({
+            from: this.aztecAccount.getAddress(),
             fee: { paymentMethod },
           })
           .wait({
@@ -318,6 +333,7 @@ class OrderService extends BaseService {
         orderStatus: nextOrderStatus,
       })
     } catch (err) {
+      console.log("Error occurred while filling order:")
       this.logger.error(err)
     } finally {
       release()

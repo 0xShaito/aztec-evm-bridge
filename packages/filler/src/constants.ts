@@ -15,7 +15,7 @@ export const ORDER_STATUS_SETTLED = "settled"
 
 export const ORDER_FILLED = 2n
 
-export const AZTEC_VERSION = 3924331020 // TODO read it from the RollupContract
+export const AZTEC_VERSION = 1667575857 // TODO read it from the RollupContract
 
 export const FORWARDER_SETTLE_ORDER_SLOT = 2n
 export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n
@@ -23,3 +23,4 @@ export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n
 export const FORWARDER_ADDRESS = process.env.FORWARDER_ADDRESS as `0x${string}`
 export const OP_STACK_ANCHOR_REGISTRY_ADDRESS = process.env.OP_STACK_ANCHOR_REGISTRY_ADDRESS as `0x${string}`
 export const AZTEC_ROLLUP_CONTRACT_L1_ADDRESS = process.env.AZTEC_ROLLUP_CONTRACT_L1_ADDRESS as `0x${string}`
+export const IS_SANDBOX_ENV = (process.env.AZTEC_SANDBOX ?? "").toLowerCase() === "true"
