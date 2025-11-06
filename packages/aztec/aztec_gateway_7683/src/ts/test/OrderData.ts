@@ -1,6 +1,6 @@
 import { encodePacked } from "viem"
 import { poseidon2Hash } from "@aztec/foundation/crypto"
-import { Fr } from "@aztec/aztec.js"
+import { Fr } from "@aztec/aztec.js/fields"
 
 export interface OrderDataParams {
   sender: `0x${string}`
@@ -90,14 +90,14 @@ export class OrderData {
       Fr.fromBufferReduce(Buffer.from(this.recipient.slice(2), "hex")),
       Fr.fromBufferReduce(Buffer.from(this.inputToken.slice(2), "hex")),
       Fr.fromBufferReduce(Buffer.from(this.outputToken.slice(2), "hex")),
-      Fr.fromBufferReduce(Buffer.from(this.amountIn.toString(16), "hex")),
-      Fr.fromBufferReduce(Buffer.from(this.amountOut.toString(16), "hex")),
-      Fr.fromBufferReduce(Buffer.from(this.senderNonce.toString(16), "hex")),
-      Fr.fromHexString("0x" + this.originDomain.toString(16)),
-      Fr.fromHexString("0x" + this.destinationDomain.toString(16)),
+      Fr.fromString(this.amountIn.toString()),
+      Fr.fromString(this.amountOut.toString()),
+      Fr.fromString(this.senderNonce.toString()),
+      new Fr(this.originDomain),
+      new Fr(this.destinationDomain),
       Fr.fromBufferReduce(Buffer.from(this.destinationSettler.slice(2), "hex")),
-      Fr.fromHexString("0x" + this.fillDeadline.toString(16)),
-      Fr.fromHexString("0x" + this.orderType.toString(16)),
+      new Fr(this.fillDeadline),
+      new Fr(this.orderType),
       Fr.fromBufferReduce(Buffer.from(this.data.slice(2), "hex")),
     ])
   }

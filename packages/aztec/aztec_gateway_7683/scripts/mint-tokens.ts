@@ -1,8 +1,10 @@
-import { AztecAddress, createLogger, SponsoredFeePaymentMethod } from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { createLogger } from "@aztec/foundation/log"
+import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 
 import { getSponsoredFPCAddress } from "./fpc.js"
-import { getNode, getPxe, getWalletFromSecretKey } from "./utils.js"
+import { getTestWallet, addAccountWithSecretKey } from "./utils.js"
 
 const [
   ,
@@ -13,45 +15,42 @@ const [
   recipientAddress,
   amountPrivate = "1000000000000000000",
   amountPublic = "1000000000000000000",
-  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://devnet.aztec-labs.com",
 ] = process.argv
 
 const main = async () => {
-  const logger = createLogger("deploy-token")
-  const pxe = await getPxe(rpcUrl)
+  const logger = createLogger("mint-tokens")
+  logger.info("Starting token mint...")
 
+  const wallet = await getTestWallet(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
-  const wallet = await getWalletFromSecretKey({
-    secretKey: aztecSecretKey as string,
-    salt: aztecSalt as string,
-    pxe,
+
+  const minterAccount = await addAccountWithSecretKey({
+    secretKey: aztecSecretKey,
+    salt: aztecSalt,
+    testWallet: wallet,
+    paymentMethod,
     deploy: false,
   })
 
-  const contractInstance = await getNode(rpcUrl).getContract(AztecAddress.fromString(tokenAddress))
-  await pxe.registerContract({
-    instance: contractInstance!,
-    artifact: TokenContractArtifact,
-  })
+  logger.info(`Minter account: ${minterAccount.getAddress().toString()}`)
+  logger.info(`Recipient address: ${recipientAddress}`)
+  logger.info(`Token address: ${tokenAddress}`)
 
-  const token = await TokenContract.at(AztecAddress.fromString(tokenAddress as string), wallet)
+  const token = await TokenContract.at(AztecAddress.fromString(tokenAddress), wallet)
 
+  logger.info(`Minting ${amountPrivate} tokens to private balance...`)
   await token.methods
-    .mint_to_private(wallet.getAddress(), AztecAddress.fromString(recipientAddress), BigInt(amountPrivate))
+    .mint_to_private(AztecAddress.fromString(recipientAddress), BigInt(amountPrivate))
     .send({
+      from: minterAccount.getAddress(),
       fee: { paymentMethod },
     })
     .wait({
       timeout: 120000,
     })
-  /*await token.methods
-    .mint_to_public(AztecAddress.fromString(recipientAddress), BigInt(amountPublic))
-    .send({
-      fee: { paymentMethod },
-    })
-    .wait()*/
 
-  logger.info(`tokens succesfully minted`)
+  logger.info(`✅ Tokens successfully minted to ${recipientAddress}`)
 }
 
 main().catch((err) => {

@@ -1,15 +1,17 @@
 import winston from "winston"
-import { AztecAddress } from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { PXE } from "@aztec/pxe/client/bundle"
 
 import { parseOpenLog, parseResolvedCrossChainOrder } from "../utils/aztec.js"
 
-import type { PXE } from "@aztec/aztec.js"
+import type { AztecNode } from "@aztec/aztec.js/node"
 import type { ResolvedOrder } from "../types.js"
 
 interface WatcherConfigs {
   service: string
   logger: winston.Logger
   pxe: PXE
+  node: AztecNode
   contractAddress: `0x${string}`
   eventName: string
   watchIntervalTimeMs: number
@@ -20,6 +22,7 @@ class AztecWatcher {
   logger: winston.Logger
   onLogs: (logs: any[]) => Promise<void>
   pxe: PXE
+  node: AztecNode
   contractAddress: `0x${string}`
   eventName: string
   private lastBlock: number
@@ -28,6 +31,7 @@ class AztecWatcher {
   constructor(configs: WatcherConfigs) {
     this.logger = configs.logger.child({ service: configs.service })
     this.pxe = configs.pxe
+    this.node = configs.node
     this.contractAddress = configs.contractAddress
     this.eventName = configs.eventName
     this.onLogs = configs.onLogs
@@ -47,7 +51,7 @@ class AztecWatcher {
 
   private async watch() {
     try {
-      const currentBlock = await this.pxe.getBlockNumber()
+      const currentBlock = await this.node.getBlockNumber()
       if (!this.lastBlock) {
         this.lastBlock = currentBlock - 1
       }
@@ -62,7 +66,7 @@ class AztecWatcher {
       }
 
       this.logger.info(`looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on Aztec ...`)
-      const { logs } = await this.pxe.getPublicLogs({
+      const { logs } = await this.node.getPublicLogs({
         fromBlock,
         toBlock: toBlock,
         contractAddress: AztecAddress.fromString(this.contractAddress),
@@ -73,7 +77,7 @@ class AztecWatcher {
       // in order to filter Open1 and Open2 events.
       // Currently, for the POC, it's enough to check whether `fields[0]` of both logs are the same
       // and that the log index is sequential (e.g., 0 and 1).
-      const groupedLogs = logs.reduce((acc, obj) => {
+      const groupedLogs = logs.reduce((acc: any, obj: any) => {
         const groupKey = obj.log.fields[0].toString()
         if (!acc[groupKey]) {
           acc[groupKey] = []

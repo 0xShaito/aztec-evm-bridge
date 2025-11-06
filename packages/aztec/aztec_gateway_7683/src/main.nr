@@ -1,6 +1,7 @@
 pub mod config;
 pub mod types;
 pub mod utils;
+mod test;
 
 use dep::aztec::macros::aztec;
 
@@ -46,9 +47,13 @@ pub contract AztecGateway7683 {
         utils::{u32_to_u8_4, u8_32_to_aztec_address, u8_32_to_eth_address, u8_32_to_u128},
     };
     use dep::aztec::{
-        macros::{functions::{initializer, internal, private, public, view}, storage::storage},
-        prelude::{AztecAddress, EthAddress, Map, PublicImmutable, PublicMutable},
-        protocol_types::{hash::{poseidon2_hash, sha256_to_field}, traits::{Packable, Serialize}},
+        macros::{functions::{external, initializer, internal, view}, storage::storage},
+        protocol_types::{
+            address::{AztecAddress, EthAddress},
+            hash::{poseidon2_hash, sha256_to_field},
+            traits::{Packable, Serialize},
+        },
+        state_vars::{Map, PublicImmutable, PublicMutable},
     };
     use token::Token;
 
@@ -62,13 +67,13 @@ pub contract AztecGateway7683 {
         orders_refund_block_numbers: Map<Field, PublicMutable<Field, Context>, Context>,
     }
 
-    #[public]
+    #[external("public")]
     #[initializer]
     fn constructor(l2Gateway: EthAddress, l2GatewayDomain: u32, forwarder: EthAddress) {
         storage.config.initialize(Config { l2Gateway, l2GatewayDomain, forwarder });
     }
 
-    #[private]
+    #[external("private")]
     fn claim_private(
         secret: Field,
         order_id_bytes: [u8; 32],
@@ -100,7 +105,7 @@ pub contract AztecGateway7683 {
         // transfer from gateway public balance to user private balance
         let token = u8_32_to_aztec_address(order_data.output_token);
         let partial_note = Token::at(token)
-            .prepare_private_balance_increase(context.msg_sender(), context.msg_sender())
+            .prepare_private_balance_increase(context.msg_sender().unwrap())
             .call(&mut context);
         Token::at(token)
             .finalize_transfer_to_private(u8_32_to_u128(order_data.amount_out), partial_note)
@@ -118,7 +123,7 @@ pub contract AztecGateway7683 {
             .enqueue(&mut context);
     }
 
-    #[public]
+    #[external("public")]
     fn claim_refund(
         order_id_bytes: [u8; 32],
         order_data_bytes: [u8; ORDER_DATA_LENGTH],
@@ -163,7 +168,7 @@ pub contract AztecGateway7683 {
         // TODO: emit Refunded
     }
 
-    #[private]
+    #[external("private")]
     fn claim_refund_private(
         secret: Field,
         order_id_bytes: [u8; 32],
@@ -207,14 +212,14 @@ pub contract AztecGateway7683 {
 
         let token = u8_32_to_aztec_address(order_data.input_token);
         let partial_note = Token::at(token)
-            .prepare_private_balance_increase(context.msg_sender(), context.msg_sender())
+            .prepare_private_balance_increase(context.msg_sender().unwrap())
             .call(&mut context);
         Token::at(token)
             .finalize_transfer_to_private(u8_32_to_u128(order_data.amount_in), partial_note)
             .enqueue(&mut context);
     }
 
-    #[public]
+    #[external("public")]
     fn fill(
         order_id_bytes: [u8; 32],
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
@@ -237,7 +242,7 @@ pub contract AztecGateway7683 {
         // transfer from filler public balance to gateway public balance
         Token::at(u8_32_to_aztec_address(order_data.output_token))
             .transfer_in_public(
-                context.msg_sender(),
+                context.msg_sender().unwrap(),
                 u8_32_to_aztec_address(order_data.recipient),
                 u8_32_to_u128(order_data.amount_out),
                 Field::from_be_bytes(order_data.sender_nonce),
@@ -259,7 +264,7 @@ pub contract AztecGateway7683 {
             .pack());
     }
 
-    #[private]
+    #[external("private")]
     fn fill_private(
         order_id_bytes: [u8; 32],
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
@@ -272,7 +277,7 @@ pub contract AztecGateway7683 {
         // transfer from filler private balance to gateway public balance
         Token::at(u8_32_to_aztec_address(order_data.output_token))
             .transfer_to_public(
-                context.msg_sender(),
+                context.msg_sender().unwrap(),
                 context.this_address(),
                 u8_32_to_u128(order_data.amount_out),
                 Field::from_be_bytes(order_data.sender_nonce),
@@ -296,29 +301,29 @@ pub contract AztecGateway7683 {
             .enqueue(&mut context);
     }
 
-    #[public]
+    #[external("public")]
     #[view]
     fn get_order_status(order_id: Field) -> Field {
         storage.order_status.at(order_id).read()
     }
 
-    #[public]
+    #[external("public")]
     #[view]
     fn get_order_refund_block_number(order_id: Field) -> Field {
         storage.orders_refund_block_numbers.at(order_id).read()
     }
 
-    #[public]
+    #[external("public")]
     #[view]
     fn get_order_settlement_block_number(order_id: Field) -> Field {
         storage.orders_settlement_block_numbers.at(order_id).read()
     }
 
-    #[public]
+    #[external("public")]
     fn open(order: OnchainCrossChainOrder) {
         assert(order.order_data_type == ORDER_DATA_TYPE, "Invalid data type");
 
-        let data = _resolve(order, context.msg_sender(), context.timestamp() as u32);
+        let data = _resolve(order, context.msg_sender().unwrap(), context.timestamp() as u32);
         let resolved_order = data.resolved_cross_chain_order;
         let order_id = data.order_id;
         let nonce = Field::from_be_bytes(data.order_data.sender_nonce);
@@ -328,17 +333,17 @@ pub contract AztecGateway7683 {
             "Not a public order",
         );
         assert(data.order_data.origin_domain == LOCAL_DOMAIN, "Invalid origin domain");
-        assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
+        assert(!storage.used_nonces.at(context.msg_sender().unwrap()).at(nonce).read(), "Invalid nonce");
 
         storage.order_status.at(order_id).write(OPENED);
-        storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
+        storage.used_nonces.at(context.msg_sender().unwrap()).at(nonce).write(true);
 
         for i in 0..resolved_order.min_received.len() {
             let min_received = resolved_order.min_received[i];
 
             Token::at(u8_32_to_aztec_address(min_received.token))
                 .transfer_in_public(
-                    context.msg_sender(),
+                    context.msg_sender().unwrap(),
                     context.this_address(),
                     u8_32_to_u128(min_received.amount),
                     nonce,
@@ -351,7 +356,7 @@ pub contract AztecGateway7683 {
         context.emit_public_log(event.open2.pack());
     }
 
-    #[private]
+    #[external("private")]
     fn open_private(order: OnchainCrossChainOrder) {
         assert(order.order_data_type == ORDER_DATA_TYPE, "Invalid data type");
 
@@ -378,7 +383,7 @@ pub contract AztecGateway7683 {
             // transfer from user private balance to gateway public balance
             Token::at(u8_32_to_aztec_address(min_received.token))
                 .transfer_to_public(
-                    context.msg_sender(),
+                    context.msg_sender().unwrap(),
                     context.this_address(),
                     u8_32_to_u128(min_received.amount),
                     nonce,
@@ -391,7 +396,7 @@ pub contract AztecGateway7683 {
             .enqueue(&mut context);
     }
 
-    #[public]
+    #[external("public")]
     fn refund(order_id_bytes: [u8; 32], origin_data_bytes: [u8; ORDER_DATA_LENGTH]) {
         let order_id = Field::from_be_bytes(order_id_bytes);
         let order_data = OrderData::decode(origin_data_bytes);
@@ -405,7 +410,7 @@ pub contract AztecGateway7683 {
         );
     }
 
-    #[public]
+    #[external("public")]
     fn settle(
         order_id_bytes: [u8; 32],
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
@@ -453,7 +458,7 @@ pub contract AztecGateway7683 {
             .pack());
     }
 
-    #[private]
+    #[external("private")]
     fn settle_private(
         order_id_bytes: [u8; 32],
         origin_data_bytes: [u8; ORDER_DATA_LENGTH],
@@ -493,7 +498,7 @@ pub contract AztecGateway7683 {
         let filler = u8_32_to_aztec_address(filler_data_bytes);
         let token = u8_32_to_aztec_address(order_data.input_token);
         let partial_note =
-            Token::at(token).prepare_private_balance_increase(filler, filler).call(&mut context);
+            Token::at(token).prepare_private_balance_increase(filler).call(&mut context);
         Token::at(token)
             .finalize_transfer_to_private(u8_32_to_u128(order_data.amount_in), partial_note)
             .enqueue(&mut context);
@@ -507,21 +512,21 @@ pub contract AztecGateway7683 {
             .enqueue(&mut context);
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _assert_nonce_and_set_order_status_private(order_id: Field, nonce: Field) {
-        assert(!storage.used_nonces.at(context.msg_sender()).at(nonce).read(), "Invalid nonce");
-        storage.used_nonces.at(context.msg_sender()).at(nonce).write(true);
+        assert(!storage.used_nonces.at(context.msg_sender().unwrap()).at(nonce).read(), "Invalid nonce");
+        storage.used_nonces.at(context.msg_sender().unwrap()).at(nonce).write(true);
         storage.order_status.at(order_id).write(OPENED);
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _assert_order_status_private(order_id: Field, status: Field) {
         assert(storage.order_status.at(order_id).read() == status, "Invalid status");
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _check_if_order_is_claimable_private(order_id: Field, claimable_order_commitment: Field) {
         assert(
@@ -530,7 +535,7 @@ pub contract AztecGateway7683 {
         );
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _check_refund_private(order_id: Field) {
         assert(storage.order_status.at(order_id).read() == OPENED, "Order not opened");
@@ -538,7 +543,7 @@ pub contract AztecGateway7683 {
         // TODO: emit Refunded
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _emit_open_private(
         order_id_bytes: [u8; 32],
@@ -549,13 +554,13 @@ pub contract AztecGateway7683 {
         context.emit_public_log(event.open2.pack());
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _emit_settled_private(order_id_bytes: [u8; 32], receiver: [u8; 32]) {
         context.emit_public_log(Settled { order_id: order_id_bytes, receiver }.pack());
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _fill_private(
         order_id: Field,
@@ -578,14 +583,14 @@ pub contract AztecGateway7683 {
             .pack());
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _trigger_settlement(order_id: Field, content_hash: Field) {
         storage.orders_settlement_block_numbers.at(order_id).write(context.block_number() as Field);
         context.message_portal(storage.config.read().forwarder, content_hash);
     }
 
-    #[public]
+    #[external("public")]
     #[internal]
     fn _update_order_status_private(order_id: Field, status: Field) {
         storage.order_status.at(order_id).write(status);

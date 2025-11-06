@@ -1,6 +1,6 @@
 use crate::types::{
     order_data::OrderData,
-    resolved_cross_chain_order::{FillInstruction, Output, ResolvedCrossChainOrder},
+    resolved_cross_chain_order::{ResolvedCrossChainOrder},
 };
 use dep::aztec::protocol_types::traits::{Deserialize, Serialize};
 

@@ -8,7 +8,7 @@ import OrderService from "./services/order.service.js"
 import SettlementService from "./services/settlement.service.js"
 import logger from "./utils/logger.js"
 import MultiClient from "./MultiClient.js"
-import { getAztecNode, getAztecWallet, getPxe, initPxe, registerContracts } from "./utils/aztec.js"
+import { getAztecNode, getAztecWallet, getPxe, getWallet, initPxe, registerContracts } from "./utils/aztec.js"
 import l2Gateway7683Abi from "./abis/l2Gateway7683.js"
 
 import type { Log } from "viem"
@@ -24,18 +24,37 @@ const EVM_WATCH_INTERVAL_TIME_MS = Number(process.env.EVM_WATCH_INTERVAL_TIME_MS
 const AZTEC_WATCH_INTERVAL_TIME_MS = Number(process.env.AZTEC_WATCH_INTERVAL_TIME_MS as string)
 
 const main = async () => {
-  const mongoClient = new MongoClient(process.env.MONGO_DB_URI as string)
-  await mongoClient.connect()
-  const db = mongoClient.db((process.env.MONGO_DB_NAME as string) || "filler")
+  const mongoUri = (process.env.MONGO_DB_URI as string) || "mongodb://localhost:27017"
+  const mongoUser = process.env.MONGO_DB_USER as string | undefined
+  const mongoPassword = process.env.MONGO_DB_PASSWORD as string | undefined
+  const mongoAuthSource = process.env.MONGO_DB_AUTH_SOURCE as string | undefined
+  const mongoDbName = (process.env.MONGO_DB_NAME as string) || "filler"
+
+  const mongoClient = new MongoClient(mongoUri, {
+    ...(mongoUser && mongoPassword ? { auth: { username: mongoUser, password: mongoPassword } } : {}),
+    ...(mongoAuthSource ? { authSource: mongoAuthSource } : {}),
+  })
+
+  try {
+    await mongoClient.connect()
+  } catch (err) {
+    logger.error("Could not connect to MongoDB", err)
+    process.exit(1)
+  }
+  const db = mongoClient.db(mongoDbName)
 
   // TODO: add possibility to register senders
   await initPxe()
 
-  const aztecWallet = await getAztecWallet()
+  // Register contracts (including SponsoredFPC) before deploying account
   logger.info("registering contracts into the PXE ...")
   await registerContracts({
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
   })
+
+  logger.info("deploying account...")
+  const aztecAccount = await getAztecWallet()
+  const aztecWallet = getWallet()
 
   const l2EvmChain = (Object.values(chains) as chains.Chain[]).find(
     ({ id }) => id.toString() === (process.env.EVM_L2_CHAIN_ID as string),
@@ -56,6 +75,7 @@ const main = async () => {
   const orderService = new OrderService({
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
     aztecWallet,
+    aztecAccount,
     db,
     evmMultiClient,
     logger,
@@ -66,6 +86,7 @@ const main = async () => {
   new SettlementService({
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
     aztecWallet,
+    aztecAccount,
     aztecNode: await getAztecNode(),
     beaconApiUrl: BEACON_API_URL,
     db,
@@ -96,6 +117,7 @@ const main = async () => {
     service: "AztecWatcher",
     logger,
     pxe: await getPxe(),
+    node: await getAztecNode(),
     contractAddress: AZTEC_GATEWAY_ADDRESS,
     eventName: "Open",
     watchIntervalTimeMs: AZTEC_WATCH_INTERVAL_TIME_MS,

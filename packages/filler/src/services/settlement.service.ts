@@ -1,11 +1,15 @@
 import { sha256ToField } from "@aztec/foundation/crypto"
-import { AztecAddress, EthAddress, Fr } from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { EthAddress } from "@aztec/aztec.js/addresses"
+import { Fr } from "@aztec/aztec.js/fields"
 import { bytesToHex, encodeAbiParameters, keccak256 } from "viem"
 import { waitForTransactionReceipt } from "viem/actions"
 const { ssz } = await import("@lodestar/types")
-const { BeaconBlock, SignedBeaconBlock } = ssz.electra
+const { BeaconBlock } = ssz.fulu
 const { createProof, ProofType } = await import("@chainsafe/persistent-merkle-tree")
 import { Mutex } from "async-mutex"
+import { computeL2ToL1MembershipWitness } from "@aztec/stdlib/messaging"
+import { computeL2ToL1MessageHash } from "@aztec/stdlib/hash"
 
 import BaseService from "./base.service.js"
 import {
@@ -21,6 +25,7 @@ import {
   FORWARDER_ADDRESS,
   SETTLE_ORDER_TYPE,
   AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
+  IS_SANDBOX_ENV,
 } from "../constants.js"
 import forwarderAbi from "../abis/forwarder.js"
 import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
@@ -29,26 +34,28 @@ import rollupAbi from "../abis/rollup.js"
 import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
 
 import type { Chain } from "viem"
-import type { AccountWalletWithSecretKey, AztecNode, PXE } from "@aztec/aztec.js"
 import type { BaseServiceOpts } from "./base.service.js"
 import type { Order } from "../types.js"
 import type MultiClient from "../MultiClient.js"
 
 export type SettlementServiceOpts = BaseServiceOpts & {
-  aztecWallet: AccountWalletWithSecretKey
+  aztecWallet: any
+  aztecAccount: any
   aztecGatewayAddress: `0x${string}`
-  aztecNode: AztecNode
+  aztecNode: any
   beaconApiUrl: string
   evmMultiClient: MultiClient
   forwarderAddress: `0x${string}`
   l1Chain: Chain
   l2EvmChain: Chain
   l2EvmGatewayAddress: `0x${string}`
-  pxe: PXE
+  pxe: any
 }
 
 const getExecutionStateRootProof = (block: any): { proof: string[]; leaf: string } => {
-  const blockView = BeaconBlock.toView(block)
+  // Convert JSON beacon block to SSZ format for Merkle proof generation
+  const sszBlock = BeaconBlock.fromJson(block)
+  const blockView = BeaconBlock.toView(sszBlock)
   const path = ["body", "executionPayload", "stateRoot"]
   const pathInfo = blockView.type.getPathInfo(path)
   const proofObj = createProof(blockView.node, {
@@ -61,16 +68,17 @@ const getExecutionStateRootProof = (block: any): { proof: string[]; leaf: string
 }
 
 class SettlementService extends BaseService {
-  aztecWallet: AccountWalletWithSecretKey
+  aztecWallet: any
+  aztecAccount: any
   aztecGatewayAddress: `0x${string}`
-  aztecNode: AztecNode
+  aztecNode: any
   beaconApiUrl: string
   evmMultiClient: MultiClient
   forwarderAddress: `0x${string}`
   l1Chain: Chain
   l2EvmChain: Chain
   l2EvmGatewayAddress: `0x${string}`
-  pxe: PXE
+  pxe: any
   forwardOrderSettlementMutex: Mutex
   settleOrderMutex: Mutex
 
@@ -78,6 +86,7 @@ class SettlementService extends BaseService {
     super(opts)
 
     this.aztecWallet = opts.aztecWallet
+    this.aztecAccount = opts.aztecAccount
     this.evmMultiClient = opts.evmMultiClient
     this.aztecGatewayAddress = opts.aztecGatewayAddress
     this.forwarderAddress = opts.forwarderAddress
@@ -235,25 +244,42 @@ class SettlementService extends BaseService {
       ]
       const messageHash = sha256ToField(message)
 
-      const l2ToL1Message = sha256ToField([
-        Buffer.from(this.aztecGatewayAddress.slice(2), "hex"),
-        new Fr(AZTEC_VERSION).toBuffer(),
-        EthAddress.fromString(FORWARDER_ADDRESS).toBuffer32(),
-        new Fr(FORWARDER_CHAIN_ID).toBuffer(),
-        messageHash.toBuffer(),
-      ])
+      const l2ToL1Message = computeL2ToL1MessageHash({
+        l2Sender: AztecAddress.fromString(this.aztecGatewayAddress),
+        l1Recipient: EthAddress.fromString(FORWARDER_ADDRESS),
+        content: messageHash,
+        rollupVersion: new Fr(AZTEC_VERSION),
+        chainId: new Fr(FORWARDER_CHAIN_ID),
+      })
 
       const orderSettlementBlockNumber = (await gateway.methods
         .get_order_settlement_block_number(Fr.fromBufferReduce(Buffer.from(order.orderId.slice(2), "hex")))
-        .simulate()) as bigint
+        .simulate({ from: this.aztecAccount.getAddress() })) as bigint
 
       const l1Client = this.evmMultiClient.getClientByChain(this.l1Chain)
-      const provenBlockNumber = (await l1Client.readContract({
-        address: AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
-        args: [],
-        abi: rollupAbi,
-        functionName: "getProvenBlockNumber",
-      })) as bigint
+      let provenBlockNumber: bigint
+      try {
+        provenBlockNumber = (await l1Client.readContract({
+          address: AZTEC_ROLLUP_CONTRACT_L1_ADDRESS,
+          args: [],
+          abi: rollupAbi,
+          functionName: "getProvenBlockNumber",
+        })) as bigint
+      } catch (error) {
+        if (IS_SANDBOX_ENV) {
+          this.logger.warn(
+            `skipping forwardSettleToL2 for order ${order.orderId} because getProvenBlockNumber is unavailable: ${String(
+              (error as Error).message ?? error,
+            )}`,
+          )
+          return
+        }
+
+        provenBlockNumber = orderSettlementBlockNumber
+        this.logger.error(
+          `Failed to get proven block number for order ${order.orderId}: ${String((error as Error).message ?? error)}`,
+        )
+      }
 
       if (orderSettlementBlockNumber > provenBlockNumber) {
         this.logger.info(
@@ -262,10 +288,17 @@ class SettlementService extends BaseService {
         return
       }
 
-      const [l2ToL1MessageIndex, siblingPath] = await this.pxe.getL2ToL1MembershipWitness(
+      const witness = await computeL2ToL1MembershipWitness(
+        this.aztecNode,
         parseInt(orderSettlementBlockNumber.toString()),
         l2ToL1Message,
       )
+
+      if (!witness) {
+        throw new Error(`Failed to compute L2ToL1 membership witness for order ${order.orderId}`)
+      }
+
+      const { root, leafIndex: l2ToL1MessageIndex, siblingPath } = witness
 
       // @ts-ignore
       const forwardSettleTxHash = await l1Client.writeContract({
@@ -281,7 +314,7 @@ class SettlementService extends BaseService {
           bytesToHex(Buffer.concat([...message])),
           orderSettlementBlockNumber,
           l2ToL1MessageIndex,
-          siblingPath.toBufferArray().map((buff) => "0x" + buff.toString("hex")),
+          siblingPath.toBufferArray().map((buff: any) => "0x" + buff.toString("hex")),
         ],
         chain: this.l1Chain,
         functionName: "forwardSettleToL2",
@@ -373,11 +406,24 @@ class SettlementService extends BaseService {
 
       const { parentBeaconBlockRoot: beaconRoot, timestamp: beaconOracleTimestamp } = await l2EvmClient.getBlock()
 
-      const resp = await fetch(`${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`, {
-        headers: { Accept: "application/octet-stream" },
-      })
-      const beaconBlock = SignedBeaconBlock.deserialize(new Uint8Array(await resp.arrayBuffer())).message
-      const l1BlockNumber = BigInt(beaconBlock.body.executionPayload.blockNumber)
+      this.logger.info(`Fetching beacon block ${beaconRoot} from ${this.beaconApiUrl}`)
+
+      // Alchemy returns JSON by default
+      const resp = await fetch(`${this.beaconApiUrl}/eth/v2/beacon/blocks/${beaconRoot}`)
+
+      if (!resp.ok) {
+        const errorText = await resp.text()
+        throw new Error(`Beacon API returned ${resp.status}: ${errorText.substring(0, 200)}`)
+      }
+
+      const beaconData = (await resp.json()) as any
+
+      this.logger.info(`Received beacon block for slot ${beaconData.data.message.slot}`)
+
+      // Parse the beacon block from JSON
+      const beaconBlock = beaconData.data.message
+      const l1BlockNumber = BigInt(beaconBlock.body.execution_payload.block_number)
+      console.log("l1BlockNumber", l1BlockNumber)
 
       const stateRootInclusionProof = getExecutionStateRootProof(beaconBlock)
       const storageKey = keccak256(

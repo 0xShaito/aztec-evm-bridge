@@ -1,20 +1,17 @@
 import "dotenv/config"
-import {
-  AztecAddress,
-  Contract,
-  ContractInstanceWithAddress,
-  createLogger,
-  Fr,
-  sleep,
-  SponsoredFeePaymentMethod,
-} from "@aztec/aztec.js"
+import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { Contract, ContractInstanceWithAddress } from "@aztec/aztec.js/contracts"
+import { createLogger } from "@aztec/foundation/log"
+import { Fr } from "@aztec/aztec.js/fields"
+import { sleep } from "@aztec/foundation/sleep"
+import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee"
 import { createPublicClient, hexToBytes, http, padHex } from "viem"
 import * as chains from "viem/chains"
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 import { getSponsoredFPCAddress, getSponsoredFPCInstance } from "../fpc.js"
-import { getNode, getPxe, getWalletFromSecretKey } from "../utils.js"
+import { getNode, getTestWallet, addAccountWithSecretKey } from "../utils.js"
 import { AztecGateway7683ContractArtifact } from "../../src/artifacts/AztecGateway7683.js"
 import { OrderData } from "../../src/ts/test/OrderData.js"
 
@@ -31,7 +28,7 @@ const [
   aztecTokenAddress,
   l2EvmTokenAddress,
   recipientAddress,
-  rpcUrl = "https://aztec-alpha-testnet-fullnode.zkv.xyz",
+  rpcUrl = "https://devnet.aztec-labs.com",
 ] = process.argv
 
 // NOTE: make sure that the filler is running
@@ -44,25 +41,25 @@ async function main(): Promise<void> {
     transport: http(),
   })
 
-  const pxe = await getPxe(rpcUrl)
+  const node = getNode(rpcUrl)
+  const wallet = await getTestWallet(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
-  const aztecWallet = await getWalletFromSecretKey({
+  const account = await addAccountWithSecretKey({
     secretKey: aztecSecretKey,
     salt: aztecSalt,
-    pxe,
+    testWallet: wallet,
     deploy: false,
   })
 
-  const node = getNode(rpcUrl)
-  await pxe.registerContract({
+  await wallet.registerContract({
     instance: (await node.getContract(AztecAddress.fromString(aztecGateway7683Address))) as ContractInstanceWithAddress,
     artifact: AztecGateway7683ContractArtifact,
   })
-  await pxe.registerContract({
+  await wallet.registerContract({
     instance: (await node.getContract(AztecAddress.fromString(aztecTokenAddress))) as ContractInstanceWithAddress,
     artifact: TokenContractArtifact,
   })
-  await pxe.registerContract({
+  await wallet.registerContract({
     instance: await getSponsoredFPCInstance(),
     artifact: SponsoredFPCContractArtifact,
   })
@@ -70,9 +67,9 @@ async function main(): Promise<void> {
   const gateway = await Contract.at(
     AztecAddress.fromString(aztecGateway7683Address),
     AztecGateway7683ContractArtifact,
-    aztecWallet,
+    wallet,
   )
-  const token = await Contract.at(AztecAddress.fromString(aztecTokenAddress), TokenContractArtifact, aztecWallet)
+  const token = await Contract.at(AztecAddress.fromString(aztecTokenAddress), TokenContractArtifact, wallet)
 
   const fillDeadline = 2 ** 32 - 1
   const amount = 100n
@@ -95,6 +92,13 @@ async function main(): Promise<void> {
   const orderId = await orderData.id()
 
   logger.info("opening private order ...")
+
+  // Create auth witness for private transfer
+  const witness = await wallet.createAuthWit(account.getAddress(), {
+    caller: gateway.address,
+    action: token.methods.transfer_to_public(account.getAddress(), gateway.address, amount, nonce),
+  })
+
   const receipt = await gateway.methods
     .open_private({
       fill_deadline: fillDeadline,
@@ -102,14 +106,12 @@ async function main(): Promise<void> {
       order_data_type: Array.from(hexToBytes(ORDER_DATA_TYPE)),
     })
     .with({
-      authWitnesses: [
-        await aztecWallet.createAuthWit({
-          caller: gateway.address,
-          action: token.methods.transfer_to_public(aztecWallet.getAddress(), gateway.address, amount, nonce),
-        }),
-      ],
+      authWitnesses: [witness],
     })
-    .send({ fee: { paymentMethod } })
+    .send({
+      from: account.getAddress(),
+      fee: { paymentMethod },
+    })
     .wait({
       timeout: 120000,
     })
