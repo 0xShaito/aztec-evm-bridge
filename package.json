@@ -1,5 +1,6 @@
 {
   "name": "aztec-evm-bridge",
+  "private": true,
   "packageManager": "yarn@4.9.2",
   "type": "module",
   "workspaces": [
@@ -29,5 +30,8 @@
   },
   "lint-staged": {
     "*.{js,ts,json}": "prettier --write"
+  },
+  "resolutions": {
+    "@aztec/foundation": "3.0.0-devnet.2"
   }
 }
