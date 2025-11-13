@@ -28,7 +28,7 @@ import { createPXEService } from "@aztec/pxe/server"
 import { Chain, padHex } from "viem"
 import { baseSepolia } from "viem/chains"
 
-const node = await createAztecNodeClient("https://aztec-alpha-testnet-fullnode.zkv.xyz")
+const node = await createAztecNodeClient("https://devnet.aztec-labs.com")
 const fullConfig = {
   ...getPXEServiceConfig(),
   l1Contracts: await node.getL1ContractAddresses(),
