@@ -1,5 +1,4 @@
 import type { Chain, Hex } from "viem"
-import type { PXE } from "@aztec/aztec.js"
 import type { AzguardClient } from "@azguardwallet/client"
 
 export type FilledLog = {
@@ -135,7 +134,8 @@ export interface OrderCallbacks {
 
 export interface BridgeConfigs {
   azguardClient?: AzguardClient
-  aztecPxe?: PXE
+  aztecNodeUrl?: string
+  aztecPxeStoreDirectory?: string
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
   beaconApiUrl?: string

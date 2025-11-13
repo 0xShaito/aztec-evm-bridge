@@ -14,7 +14,7 @@ export const PRIVATE_SENDER = padHex("0x")
 export const OPENED = 1
 export const FILLED = 2
 export const FILLED_PRIVATELY = 3
-export const AZTEC_VERSION = 3924331020
+export const AZTEC_VERSION = 1667575857
 export const FORWARDER_SETTLE_ORDER_SLOT = 2n
 export const FORWARDER_REFUNDED_ORDERS_SLOT = 3n
 export const L2_GATEWAY_FILLED_ORDERS_SLOT = 51n
@@ -24,26 +24,26 @@ export const aztecSepolia: InternalChain = {
   id: 999999,
   name: "Aztec Sepolia",
   rpcUrls: {
-    "aztec-alpha": {
-      http: ["https://aztec-alpha-testnet-fullnode.zkv.xyz"],
+    "aztec-devnet": {
+      http: ["https://devnet.aztec-labs.com"],
     },
     default: {
-      http: ["https://aztec-alpha-testnet-fullnode.zkv.xyz"],
+      http: ["https://devnet.aztec-labs.com"],
     },
   },
 }
 
 export const gatewayAddresses: Record<number, Hex> = {
-  [aztecSepolia.id]: "0x1b4f272b622a493184f6fbb83fc7631f1ce9bad68d4d4c150dc55eed5f100d73",
-  [baseSepolia.id]: "0x0Bf4eD5a115e6Ad789A88c21e9B75821Cc7B2e6f",
+  [aztecSepolia.id]: "0x1d00eed278af1188812a21fa4c2e38034424e166196229a25026ecc35c1502b9",
+  [baseSepolia.id]: "0x85752d27D29FF5D0683b8aE1B60705080CA7142f",
 }
 
 export const aztecRollupContractL1Addresses: Record<number, Hex> = {
-  [sepolia.id]: "0x216f071653a82ced3ef9d29f3f0c0ed7829c8f81",
+  [sepolia.id]: "0xb05f36c9dffa76f0af639385ef44d5560e0160c1",
 }
 
 export const forwarderAddresses: Record<number, Hex> = {
-  [sepolia.id]: "0xfbbb6dDb3534A2A8eb7c0eC1ad3abBbc9f694ECd",
+  [sepolia.id]: "0x189a12A3619f95E4E876a67c024C88f786E4F299",
 }
 
 export const opStackAnchorRegistryAddresses: Record<number, Hex> = {
