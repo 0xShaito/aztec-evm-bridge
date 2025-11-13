@@ -9,6 +9,12 @@ The **Aztec-EVM Bridge** is a privacy-preserving, trust-minimized cross-chain in
 This project is a **pure proof of concept** and is intended for **research and experimentation purposes only**. We have **not evaluated its compliance** with any applicable laws, regulations, or industry standards. As such, **it has not been deployed to any mainnet environment**.
 Use at your own risk. We make **no guarantees** about the security, correctness, or legal validity of this code.
 
+## 📋 Prerequisites
+
+- **Bun** (latest version) - This project uses Bun for package management and runtime
+- Access to Aztec sandbox or remote Aztec node
+- MongoDB (for filler service)
+
 ## ✨ Features
 
 - **🕵️ Privacy-Preserving Transactions**: Utilizes Aztec's zero-knowledge proofs to ensure transaction confidentiality.

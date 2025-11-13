@@ -23,11 +23,6 @@
     "jsx": "react-jsx",
     "isolatedModules": true
   },
-  "ts-node": {
-    "experimentalSpecifierResolution": "node",
-    "transpileOnly": true,
-    "esm": true
-  },
   "include": [
     "src",
     "scripts/**/*",

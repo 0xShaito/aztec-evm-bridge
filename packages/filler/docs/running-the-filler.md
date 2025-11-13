@@ -4,7 +4,7 @@ This guide explains how to configure and operate the filler so it can automatica
 
 ## Prerequisites
 
-- Node.js (use the version from `.nvmrc`) and Yarn installed locally.
+- **Bun** (latest version) installed locally.
 - Access to the Aztec sandbox (via `aztec start sandbox`) or a remote Aztec node.
 - A funded EVM L2 (Base Sepolia) account with the tokens the filler will spend.
 - EVM L2 RPC endpoints that support filter-based log queries (`eth_newFilter` / contract event filters). Some public RPCs disable this; use an archive-capable provider that allows `createContractEventFilter`.
@@ -15,8 +15,7 @@ This guide explains how to configure and operate the filler so it can automatica
 
 ```bash
 cd packages/filler
-nvm use
-yarn install
+bun install
 ```
 
 ## Environment Configuration
@@ -57,11 +56,11 @@ These copies keep the filler’s TypeScript bindings and bytecode in sync with t
 
 1. Compile the TypeScript sources:
    ```bash
-    yarn build
+    bun build
    ```
 2. Start the filler:
    ```bash
-    yarn start
+    bun start
    ```
 
 The filler will bootstrap a PXE instance, register the necessary contracts, and start two watchers:

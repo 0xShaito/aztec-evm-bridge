@@ -1,7 +1,7 @@
 {
   "name": "aztec-evm-bridge",
   "private": true,
-  "packageManager": "yarn@4.9.2",
+  "packageManager": "bun@latest",
   "type": "module",
   "workspaces": [
     "packages/aztec/*",
@@ -9,13 +9,13 @@
     "packages/sdk"
   ],
   "scripts": {
-    "build": "yarn workspaces foreach --since run build",
-    "lint": "yarn workspaces foreach --since run lint",
-    "lint:fix": "yarn workspaces foreach --since run lint:fix",
-    "format": "yarn workspaces foreach --since run format",
+    "build": "bun run --filter='*' build",
+    "lint": "bun run --filter='*' lint",
+    "lint:fix": "bun run --filter='*' lint:fix",
+    "format": "bun run --filter='*' format",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "yarn build && changeset publish",
+    "release": "bun run build && changeset publish",
     "prepare": "husky",
     "postinstall": "husky install",
     "prepublishOnly": "pinst --disable",

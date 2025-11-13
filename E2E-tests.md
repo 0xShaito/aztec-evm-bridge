@@ -50,7 +50,7 @@ cast send <0xL2Gateway7683> \
 #### AztecToken
 
 ```bash
-NODE_NO_WARNINGS=1 node --loader ts-node/esm packages/aztec/aztec_gateway_7683/scripts/deploy-token.ts        
+bun packages/aztec/aztec_gateway_7683/scripts/deploy-token.ts        
     <aztec-secret-key> \
     <aztec-salt> \ 
     <token-name> <token-symbol> <decimals> \
@@ -71,7 +71,7 @@ forge create --broadcast \
 ### Base Sepolia → Aztec
 
 ```bash
-NODE_NO_WARNINGS=1 node --loader ts-node/esm packages/aztec/aztec_gateway_7683/scripts/e2e/evm-to-aztec.ts \
+bun packages/aztec/aztec_gateway_7683/scripts/e2e/evm-to-aztec.ts \
   <aztec-secret-key> \
   <aztec-salt> \
   <evm-private-key> \
@@ -88,7 +88,7 @@ The script approves tokens on Base Sepolia, opens an order on the L2 gateway, an
 ### Aztec → Base Sepolia
 
 ```bash
-NODE_NO_WARNINGS=1 node --loader ts-node/esm packages/aztec/aztec_gateway_7683/scripts/e2e/aztec-to-evm.ts \
+bun packages/aztec/aztec_gateway_7683/scripts/e2e/aztec-to-evm.ts \
   <aztec-secret-key> \
   <aztec-salt> \
   <aztec-gateway-addr> \

@@ -1,14 +1,13 @@
 # Filler
 
-## �� Installation
+## 📦 Installation
 
 Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/substance-labs/aztec-evm-bridge
 cd aztec-evm-bridge/packages/filler
-nvm use
-yarn install
+bun install
 ```
 
 Copy the sample environment file and set the required values:
@@ -23,7 +22,7 @@ cp .env.example .env
 To start the dev server with hot reload:
 
 ```bash
-yarn dev
+bun dev
 ```
 
 ## 🧱 Build
@@ -31,13 +30,13 @@ yarn dev
 To compile the TypeScript source into `dist/`:
 
 ```bash
-yarn build
+bun build
 ```
 
 Start the compiled version with:
 
 ```bash
-yarn start
+bun start
 ```
 
 For operational walkthroughs and troubleshooting tips, refer to [`docs/running-the-filler.md`](docs/running-the-filler.md).
