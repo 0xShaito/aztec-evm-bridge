@@ -1,6 +1,23 @@
 {
   "name": "@substancelabs/aztec-evm-bridge-sdk",
   "version": "0.0.1",
+  "description": "TypeScript SDK for bridging assets between Aztec and EVM chains using ERC-7683",
+  "license": "MIT",
+  "author": "Substance Labs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/substance-labs/aztec-evm-bridge.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "aztec",
+    "evm",
+    "bridge",
+    "erc7683",
+    "crosschain",
+    "intent",
+    "sdk"
+  ],
   "types": "dist/index.d.ts",
   "module": "dist/index.mjs",
   "main": "dist/index.mjs",
@@ -12,8 +29,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "clean": "rm -rf dist",
