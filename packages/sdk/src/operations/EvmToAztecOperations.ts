@@ -283,7 +283,7 @@ export class EvmToAztecOperations {
 
     const wallet = await this.#getAztecWallet()
     const account = await this.#getAztecAccount()
-    const fillerData = account.getAddress().toString()
+    const fillerData = wallet.getAddress().toString()
 
     const tokenInstance = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
       AztecAddress.fromString(orderData.outputToken),
@@ -301,8 +301,8 @@ export class EvmToAztecOperations {
     if (isPrivate) {
       witness = await account.createAuthWit({
         caller: AztecAddress.fromString(gatewayOut),
-        action: token.methods.transfer_to_public(
-          account.getAddress(),
+        action: token.methods.transfer_private_to_public(
+          wallet.getAddress(),
           AztecAddress.fromString(gatewayOut),
           orderData.amountOut,
           orderData.senderNonce,
@@ -311,11 +311,11 @@ export class EvmToAztecOperations {
     } else {
       await (
         await wallet.setPublicAuthWit(
-          account.getAddress(),
+          wallet.getAddress(),
           {
             caller: AztecAddress.fromString(gatewayOut),
-            action: token.methods.transfer_in_public(
-              account.getAddress(),
+            action: token.methods.transfer_public_to_public(
+              wallet.getAddress(),
               AztecAddress.fromString(orderData.recipient),
               orderData.amountOut,
               orderData.senderNonce,
@@ -339,7 +339,7 @@ export class EvmToAztecOperations {
         authWitnesses: witness ? [witness] : [],
       })
       .send({
-        from: account.getAddress(),
+        from: wallet.getAddress(),
         fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
       })
       .wait({
@@ -426,7 +426,7 @@ export class EvmToAztecOperations {
       const receipt = await gateway.methods
         .refund(hexToUintArray(orderId), hexToUintArray(originDataHex as Hex))
         .send({
-          from: account.getAddress(),
+          from: wallet.getAddress(),
           fee: {
             paymentMethod: await getSponsporedFeePaymentMethod(),
           },
@@ -481,7 +481,7 @@ export class EvmToAztecOperations {
         hexToUintArray(log.fillerData as Hex),
       )
       .send({
-        from: account.getAddress(),
+        from: wallet.getAddress(),
         fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
       })
       .wait({
@@ -529,7 +529,7 @@ export class EvmToAztecOperations {
     while (true) {
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       const status = parseInt(
-        await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate({ from: account.getAddress() }),
+        await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate({ from: wallet.getAddress() }),
       )
       if (status === FILLED_PRIVATELY || status === FILLED) {
         onOrderFilled?.({ orderId })

@@ -20,7 +20,8 @@
     "resolveJsonModule": true,
     "composite": true,
     "skipLibCheck": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "isolatedModules": true
   },
   "ts-node": {
     "experimentalSpecifierResolution": "node",

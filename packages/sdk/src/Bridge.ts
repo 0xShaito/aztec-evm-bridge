@@ -24,10 +24,15 @@ import { TxHash, TxReceipt } from "@aztec/aztec.js/tx"
 import { sleep } from "@aztec/foundation/sleep"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
+import { deriveSigningKey } from "@aztec/stdlib/keys"
+import { SchnorrAccountContractArtifact } from "@aztec/accounts/schnorr"
 import { TestWallet } from "@aztec/test-wallet/server"
 import { createStore } from "@aztec/kv-store/lmdb"
 import { getPXEConfig } from "@aztec/pxe/server"
-import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import {
+  TokenContract,
+  TokenContractArtifact,
+} from "@defi-wonderland/aztec-standards/current/artifacts/Token.js"
 import { AccountWithSecretKey } from "@aztec/aztec.js/account"
 import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { privateKeyToAccount } from "viem/accounts"
@@ -415,7 +420,7 @@ export class Bridge {
     if (isPrivate) {
       witness = await account.createAuthWit({
         caller: AztecAddress.fromString(gatewayOut),
-        action: token.methods.transfer_to_public(
+        action: token.methods.transfer_private_to_public(
           account.getAddress(),
           AztecAddress.fromString(gatewayOut), // NOTE: private orders must be claimed by the user
           orderData.amountOut,
@@ -428,7 +433,7 @@ export class Bridge {
           account.getAddress(),
           {
             caller: AztecAddress.fromString(gatewayOut),
-            action: token.methods.transfer_in_public(
+            action: token.methods.transfer_public_to_public(
               account.getAddress(),
               AztecAddress.fromString(orderData.recipient),
               orderData.amountOut,
@@ -1091,7 +1096,7 @@ export class Bridge {
       if (isPrivate) {
         witness = await account.createAuthWit({
           caller: AztecAddress.fromString(gatewayIn),
-          action: token.methods.transfer_to_public(
+          action: token.methods.transfer_private_to_public(
             account.getAddress(),
             AztecAddress.fromString(gatewayIn),
             amountIn,
@@ -1104,7 +1109,7 @@ export class Bridge {
             account.getAddress(),
             {
               caller: AztecAddress.fromString(gatewayIn),
-              action: token.methods.transfer_in_public(
+              action: token.methods.transfer_public_to_public(
                 account.getAddress(),
                 AztecAddress.fromString(gatewayIn),
                 amountIn,

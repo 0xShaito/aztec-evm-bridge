@@ -2124,6 +2124,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@defi-wonderland/aztec-standards@npm:3.0.0-devnet.2":
+  version: 3.0.0-devnet.2
+  resolution: "@defi-wonderland/aztec-standards@npm:3.0.0-devnet.2"
+  checksum: 10c0/007cc5c1e99eef33fafc436d0b5d0a77d71dca2eb452a12b5a9862f5fd98a30f76553ce28794e90232607722c2c93c7f34a13ef5468767ac6cb86d2775ddd992
+  languageName: node
+  linkType: hard
+
 "@esbuild/aix-ppc64@npm:0.25.12":
   version: 0.25.12
   resolution: "@esbuild/aix-ppc64@npm:0.25.12"
@@ -4355,6 +4362,7 @@ __metadata:
     "@aztec/noir-contracts.js": "npm:3.0.0-devnet.2"
     "@aztec/pxe": "npm:3.0.0-devnet.2"
     "@aztec/stdlib": "npm:3.0.0-devnet.2"
+    "@defi-wonderland/aztec-standards": "npm:3.0.0-devnet.2"
     "@lodestar/types": "npm:^1.33.0"
     "@types/node": "npm:^24.2.0"
     dotenv: "npm:^17.2.1"
@@ -4378,6 +4386,7 @@ __metadata:
     "@aztec/pxe": "npm:3.0.0-devnet.2"
     "@aztec/stdlib": "npm:3.0.0-devnet.2"
     "@aztec/test-wallet": "npm:3.0.0-devnet.2"
+    "@defi-wonderland/aztec-standards": "npm:3.0.0-devnet.2"
     "@types/jest": "npm:^29.5.11"
     "@types/mocha": "npm:^10.0.6"
     "@types/node": "npm:^22.5.1"
@@ -4403,6 +4412,7 @@ __metadata:
     "@aztec/stdlib": "npm:3.0.0-devnet.2"
     "@chainsafe/persistent-merkle-tree": "npm:^1.1.0"
     "@chainsafe/ssz": "npm:^1.2.0"
+    "@defi-wonderland/aztec-standards": "npm:3.0.0-devnet.2"
     "@lodestar/types": "npm:^1.35.0"
     async-mutex: "npm:^0.5.0"
     dotenv: "npm:^16.4.7"

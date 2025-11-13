@@ -48,7 +48,7 @@ const main = async () => {
 
   const gateway = await deployMethod
     .send({
-      from: account.getAddress(),
+      from: wallet.getAddress(),
       contractAddressSalt: Fr.random(),
       universalDeploy: true,
       fee: { paymentMethod },

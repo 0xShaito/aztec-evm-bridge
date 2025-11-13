@@ -162,7 +162,7 @@ async function main(): Promise<void> {
   while (true) {
     const status = await gateway.methods
       .get_order_status(orderId)
-      .simulate({ from: account.getAddress(), skipTxValidation: true })
+      .simulate({ from: wallet.getAddress(), skipTxValidation: true })
     logger.info(`order ${orderId.toString()} status: ${status}`)
     // FILLED_PRIVATELY
     if (status === 3n) {
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
           Array.from(hexToBytes(log.fillerData as `0x${string}`)),
         )
         .send({
-          from: account.getAddress(),
+          from: wallet.getAddress(),
           fee: {
             paymentMethod,
           },

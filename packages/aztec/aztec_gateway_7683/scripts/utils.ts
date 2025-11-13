@@ -8,6 +8,7 @@ import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { AztecAddress } from "@aztec/aztec.js/addresses"
 import { getSponsoredFPCInstance } from "./fpc.js"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { rmSync } from "fs"
 import { TestWallet } from "@aztec/test-wallet/server"
 import { AccountWithSecretKey } from "@aztec/aztec.js/account"
 
@@ -22,6 +23,9 @@ export const getPXEs = async (names: string[]): Promise<{ pxes: PXE[]; node: Azt
   }
 
   const pxes: PXE[] = []
+
+  // Delete the previous store dir before creating a new one
+  rmSync(`store`, { recursive: true, force: true })
   for (const name of names) {
     const store = await createStore(name, {
       dataDirectory: "store",
@@ -31,6 +35,7 @@ export const getPXEs = async (names: string[]): Promise<{ pxes: PXE[]; node: Azt
       store,
       useLogSuffix: true,
     })
+    console.log(`${name} info`, await pxe.getPXEInfo())
     pxes.push(pxe)
   }
 

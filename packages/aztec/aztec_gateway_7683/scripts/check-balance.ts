@@ -20,7 +20,7 @@ const main = async () => {
     deploy: false,
   })
 
-  logger.info(`Account: ${account.getAddress().toString()}`)
+  logger.info(`Account: ${wallet.getAddress().toString()}`)
   logger.info(`Checking address: ${accountAddress}`)
   logger.info(`Token address: ${tokenAddress}`)
 
@@ -40,10 +40,10 @@ const main = async () => {
   const targetAddress = AztecAddress.fromString(accountAddress)
 
   logger.info(`Checking public balance...`)
-  const publicBalance = await token.methods.balance_of_public(targetAddress).simulate({ from: account.getAddress() })
+  const publicBalance = await token.methods.balance_of_public(targetAddress).simulate({ from: wallet.getAddress() })
 
   logger.info(`Checking private balance...`)
-  const privateBalance = await token.methods.balance_of_private(targetAddress).simulate({ from: account.getAddress() })
+  const privateBalance = await token.methods.balance_of_private(targetAddress).simulate({ from: wallet.getAddress() })
 
   logger.info(`\n📊 Balance Report:`)
   logger.info(`   Token: ${tokenAddress}`)
