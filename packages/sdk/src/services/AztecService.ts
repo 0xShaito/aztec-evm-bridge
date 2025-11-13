@@ -4,7 +4,6 @@ import { TestWallet } from "@aztec/test-wallet/server"
 import { createStore } from "@aztec/kv-store/lmdb"
 import { getPXEConfig } from "@aztec/pxe/server"
 import { AccountWithSecretKey } from "@aztec/aztec.js/account"
-import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { AztecAddress } from "@aztec/aztec.js/addresses"
 import type { Hex } from "viem"
 
@@ -55,7 +54,6 @@ export class AztecService {
       const wallet = await this.getWallet()
       const secretKey = Fr.fromHexString(this.#config.aztecSecretKey!)
       const salt = Fr.fromHexString(this.#config.aztecKeySalt!)
-      const signingKey = deriveSigningKey(secretKey)
       const accountContract = await wallet.createSchnorrAccount(secretKey, salt)
       this.#account = await accountContract.getAccount()
     }

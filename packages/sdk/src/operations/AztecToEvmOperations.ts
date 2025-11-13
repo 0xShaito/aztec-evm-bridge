@@ -1,6 +1,8 @@
 import { AbiEvent, Chain, createPublicClient, erc20Abi, Hex, http, padHex } from "viem"
 import * as evmChains from "viem/chains"
-import { AztecAddress, Fr } from "@aztec/aztec.js"
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Fr } from "@aztec/aztec.js/fields"
 import { createAztecNodeClient } from "@aztec/aztec.js/node"
 import { TxReceipt } from "@aztec/aztec.js/tx"
 import { sleep } from "@aztec/foundation/sleep"
@@ -38,7 +40,7 @@ export class AztecToEvmOperations {
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
   evmPrivateKey?: Hex
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+
   evmProvider?: any
 
   #getAztecWallet: () => Promise<any>

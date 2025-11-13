@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   AbiEvent,
   bytesToHex,
@@ -6,7 +8,6 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
-  decodeAbiParameters,
   encodeAbiParameters,
   erc20Abi,
   Hex,
@@ -23,14 +24,12 @@ import { TxHash, TxReceipt } from "@aztec/aztec.js/tx"
 import { sleep } from "@aztec/foundation/sleep"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
-import { deriveSigningKey } from "@aztec/stdlib/keys"
 import { TestWallet } from "@aztec/test-wallet/server"
 import { createStore } from "@aztec/kv-store/lmdb"
 import { getPXEConfig } from "@aztec/pxe/server"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { AccountWithSecretKey } from "@aztec/aztec.js/account"
 import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
-import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 import { hexToBuffer } from "@aztec/foundation/string"
@@ -106,7 +105,7 @@ export class Bridge {
   aztecSecretKey?: Hex
   beaconApiUrl?: string
   evmPrivateKey?: Hex
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+
   evmProvider?: any
   #testWallet?: TestWallet
   #account?: AccountWithSecretKey

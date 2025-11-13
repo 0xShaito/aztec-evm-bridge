@@ -1,14 +1,7 @@
 import type { Hex } from "viem"
 import * as evmChains from "viem/chains"
-import {
-  aztecSepolia,
-  gatewayAddresses,
-  PRIVATE_ORDER,
-  PRIVATE_ORDER_WITH_HOOK,
-  PUBLIC_ORDER,
-  PUBLIC_ORDER_WITH_HOOK,
-} from "../constants"
-import type { InternalChain, Order } from "../types"
+import { aztecSepolia, gatewayAddresses, PRIVATE_ORDER, PUBLIC_ORDER } from "../constants"
+import type { InternalChain, SwapMode } from "../types"
 
 export class BridgeHelpers {
   static getChainInAndOutByChainIds(
@@ -25,18 +18,22 @@ export class BridgeHelpers {
     if (chainId === aztecSepolia.id) {
       return aztecSepolia
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const key = Object.keys(evmChains).find((key) => (evmChains as any)[key].id === chainId)
     if (!key) {
       throw new Error(`Chain not found for chainId: ${chainId}`)
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (evmChains as any)[key]
   }
 
-  static getOrderType(mode: Order["mode"]): number {
+  static getOrderType(mode: SwapMode): number {
     switch (mode) {
       case "public":
+      case "publicWithHook":
         return PUBLIC_ORDER
       case "private":
+      case "privateWithHook":
         return PRIVATE_ORDER
       default:
         throw new Error(`Invalid order mode: ${mode}`)

@@ -1,4 +1,4 @@
-import type { Hex } from "viem"
+import { Hex } from "viem"
 import type { ForwardDetails } from "../types"
 
 /**
@@ -14,6 +14,7 @@ export class ForwardOperations {
   /**
    * Forward a settle order message through L1 to the destination chain
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async forwardSettleOrder(details: ForwardDetails): Promise<Hex> {
     throw new Error("Not implemented - extract from Bridge.forwardSettleOrder")
   }
@@ -21,6 +22,7 @@ export class ForwardOperations {
   /**
    * Forward a refund order message through L1 to the destination chain
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async forwardRefundOrder(details: ForwardDetails): Promise<Hex> {
     throw new Error("Not implemented - extract from Bridge.forwardRefundOrder")
   }
@@ -28,6 +30,7 @@ export class ForwardOperations {
   /**
    * Finalize a forward settle order with proof
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async finalizeForwardSettleOrder(details: ForwardDetails): Promise<Hex> {
     throw new Error("Not implemented - extract from Bridge.finalizeForwardSettleOrder")
   }
@@ -35,6 +38,7 @@ export class ForwardOperations {
   /**
    * Finalize a forward refund order with proof
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async finalizeForwardRefundOrder(details: ForwardDetails): Promise<Hex> {
     throw new Error("Not implemented - extract from Bridge.finalizeForwardRefundOrder")
   }

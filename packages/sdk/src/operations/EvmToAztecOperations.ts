@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { AbiEvent, Chain, createClient, createPublicClient, erc20Abi, Hex, http, padHex } from "viem"
 import * as evmChains from "viem/chains"
 import { AztecAddress, Fr } from "@aztec/aztec.js"
@@ -47,7 +49,7 @@ export class EvmToAztecOperations {
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
   evmPrivateKey?: Hex
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+
   evmProvider?: any
 
   #getAztecWallet: () => Promise<any>

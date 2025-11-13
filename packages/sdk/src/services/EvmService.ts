@@ -1,8 +1,9 @@
-import { type Chain, createClient, createWalletClient, custom, type Hex, http } from "viem"
+import { Chain, createWalletClient, custom, http, Hex } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
 
 export interface EvmServiceConfig {
   evmPrivateKey?: Hex
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   evmProvider?: any
 }
 

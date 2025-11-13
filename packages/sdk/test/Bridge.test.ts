@@ -1,5 +1,4 @@
-import { describe, it, expect } from "vitest"
-import { AztecAddress } from "@aztec/aztec.js/addresses"
+import { describe, expect } from "vitest"
 import { Fr } from "@aztec/aztec.js/fields"
 import { createAztecNodeClient } from "@aztec/aztec.js/node"
 import { createStore } from "@aztec/kv-store/lmdb"
@@ -9,7 +8,6 @@ import { baseSepolia } from "viem/chains"
 import { Hex, isHex, padHex } from "viem"
 import { AzguardClient } from "@azguardwallet/client"
 import { privateKeyToAddress } from "viem/accounts"
-import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
 import { AccountWithSecretKey } from "@aztec/aztec.js/account"
 
 import { Bridge, aztecSepolia, ResolvedOrder, OrderDataEncoder } from "../src"
@@ -115,7 +113,7 @@ describe("Bridge", { timeout: 600000 }, () => {
 
   describe("Aztec -> Base", () => {
     it("should create a public order from Aztec to Base", async () => {
-      const { aztecNode, aztecNodeUrl } = await setup()
+      const { aztecNodeUrl } = await setup()
 
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
@@ -260,7 +258,7 @@ describe("Bridge", { timeout: 600000 }, () => {
 
   describe("Base -> Aztec", () => {
     it("should open a private order from Base to Aztec", async () => {
-      const { aztecNode, aztecAccount, aztecNodeUrl } = await setup()
+      const { aztecAccount, aztecNodeUrl } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -345,7 +343,7 @@ describe("Bridge", { timeout: 600000 }, () => {
     })
 
     it("should open a private order from Base to Aztec and then ask for a refund", async () => {
-      const { aztecNode, aztecNodeUrl } = await setup()
+      const { aztecNodeUrl } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -387,7 +385,7 @@ describe("Bridge", { timeout: 600000 }, () => {
     })
 
     it.skip("should open a private order from Base to Aztec and then fill it", async () => {
-      const { aztecNode, aztecNodeUrl } = await setup()
+      const { aztecNodeUrl } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
@@ -423,7 +421,7 @@ describe("Bridge", { timeout: 600000 }, () => {
     })
 
     it.skip("should open a private order from Base to Aztec and then fill it", async () => {
-      const { aztecNode, aztecNodeUrl } = await setup()
+      const { aztecNodeUrl } = await setup()
       const bridge = new Bridge({
         evmPrivateKey: process.env.EVM_PK as Hex,
         aztecSecretKey: process.env.AZTEC_SECRET_KEY as Hex,
