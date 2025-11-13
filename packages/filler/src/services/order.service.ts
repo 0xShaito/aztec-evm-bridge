@@ -172,7 +172,33 @@ class OrderService extends BaseService {
         functionName: "approve",
       })
       await waitForTransactionReceipt(l2EvmClient, { hash: txHash })
-      this.logger.info(`tokens approved. ${this.l2EvmChain.name}:${txHash}. filling the order ...`)
+      this.logger.info(`tokens approved. ${this.l2EvmChain.name}:${txHash}. verifying allowance ...`)
+
+      // Verify approval with retry logic
+      let allowance = 0n
+      let retries = 3
+      while (retries > 0) {
+        allowance = (await l2EvmClient.readContract({
+          abi: erc20Abi,
+          address: maxSpentToken! as `0x${string}`,
+          functionName: "allowance",
+          args: [l2EvmClient.account!.address, this.l2EvmGatewayAddress],
+        })) as bigint
+        if (allowance >= maxSpentAmount!) {
+          break
+        }
+        retries--
+        if (retries > 0) {
+          this.logger.info(`allowance not yet updated, retrying... (${retries} attempts left)`)
+          await new Promise((resolve) => setTimeout(resolve, 5000))
+        }
+      }
+      if (allowance < maxSpentAmount!) {
+        throw new Error(
+          `Token approval failed: allowance is ${allowance}, need ${maxSpentAmount} for gateway ${this.l2EvmGatewayAddress}`,
+        )
+      }
+      this.logger.info(`allowance verified: ${allowance}. filling the order ...`)
 
       const fillerData = this.aztecAccount.getAddress().toString()
       // @ts-ignore
@@ -292,22 +318,25 @@ class OrderService extends BaseService {
       } else {
         this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
         const recipient = `0x${originData.slice(66, 66 + 64)}`
-        // @ts-ignore
-        const res = await this.aztecAccount.setPublicAuthWit(
-          {
-            caller: AztecAddress.fromString(this.aztecGatewayAddress),
-            action: token.methods.transfer_in_public(
-              this.aztecAccount.getAddress(),
-              AztecAddress.fromString(recipient),
-              maxSpentAmount,
-              nonce,
-            ),
-          },
-          true,
+        await (
+          await this.aztecWallet.setPublicAuthWit(
+            this.aztecAccount.getAddress(),
+            {
+              caller: AztecAddress.fromString(this.aztecGatewayAddress),
+              action: token.methods.transfer_in_public(
+                this.aztecAccount.getAddress(),
+                AztecAddress.fromString(recipient),
+                maxSpentAmount,
+                nonce,
+              ),
+            },
+            true,
+          )
         )
-        await res.send({ from: this.aztecAccount.getAddress(), fee: { paymentMethod } }).wait({
-          timeout: 120000,
-        })
+          .send({ from: this.aztecAccount.getAddress(), fee: { paymentMethod } })
+          .wait({
+            timeout: 120000,
+          })
 
         this.logger.info(`filling the public order ${orderId} ...`)
 
