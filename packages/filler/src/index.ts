@@ -14,6 +14,7 @@ import l2Gateway7683Abi from "./abis/l2Gateway7683.js"
 import type { Log } from "viem"
 
 const AZTEC_GATEWAY_ADDRESS = process.env.AZTEC_GATEWAY_ADDRESS as `0x${string}`
+const AZTEC_TOKEN_ADDRESS = process.env.AZTEC_TOKEN_ADDRESS as `0x${string}` | undefined
 const L2_EVM_GATEWAY_ADDRESS = process.env.L2_EVM_GATEWAY_ADDRESS as `0x${string}`
 const FORWARDER_ADDRESS = process.env.FORWARDER_ADDRESS as `0x${string}`
 const FORWARDER_RPC_URL = process.env.FORWARDER_RPC_URL as string
@@ -22,6 +23,7 @@ const EVM_L2_RPC_URL = process.env.EVM_L2_RPC_URL as string
 const BEACON_API_URL = process.env.BEACON_API_URL as string
 const EVM_WATCH_INTERVAL_TIME_MS = Number(process.env.EVM_WATCH_INTERVAL_TIME_MS as string)
 const AZTEC_WATCH_INTERVAL_TIME_MS = Number(process.env.AZTEC_WATCH_INTERVAL_TIME_MS as string)
+const SILENT_MODE = process.env.SILENT_MODE === "true"
 
 const main = async () => {
   const mongoUri = (process.env.MONGO_DB_URI as string) || "mongodb://localhost:27017"
@@ -50,6 +52,7 @@ const main = async () => {
   logger.info("registering contracts into the PXE ...")
   await registerContracts({
     aztecGatewayAddress: AZTEC_GATEWAY_ADDRESS,
+    aztecTokenAddress: AZTEC_TOKEN_ADDRESS,
   })
 
   logger.info("deploying account...")
@@ -81,6 +84,7 @@ const main = async () => {
     logger,
     l2EvmChain,
     l2EvmGatewayAddress: L2_EVM_GATEWAY_ADDRESS,
+    silent: SILENT_MODE,
   })
 
   new SettlementService({
@@ -97,6 +101,7 @@ const main = async () => {
     l2EvmChain,
     l2EvmGatewayAddress: L2_EVM_GATEWAY_ADDRESS,
     pxe: await getPxe(),
+    silent: SILENT_MODE,
   })
 
   const evmWatcher = new EvmWatcher({
@@ -107,6 +112,7 @@ const main = async () => {
     abi: l2Gateway7683Abi,
     eventName: "Open",
     watchIntervalTimeMs: EVM_WATCH_INTERVAL_TIME_MS,
+    silent: SILENT_MODE,
     onLogs: async (logs: Log[]) => {
       for (const log of logs) {
         await orderService.fillEvmOrderFromLog(log)
@@ -121,6 +127,7 @@ const main = async () => {
     contractAddress: AZTEC_GATEWAY_ADDRESS,
     eventName: "Open",
     watchIntervalTimeMs: AZTEC_WATCH_INTERVAL_TIME_MS,
+    silent: SILENT_MODE,
     onLogs: async (logs) => {
       for (const log of logs) {
         await orderService.fillAztecOrderFromLog(log)

@@ -1,6 +1,19 @@
 .DS_Store
-.yarn/
 node_modules/
 dist/
 .env
 logs/
+
+# Aztec PXE local database (contains user-specific account data and state)
+store/
+
+# Forge build output
+packages/evm/out/
+packages/evm/cache/
+
+# Noir compilation output
+packages/aztec/**/target/
+packages/aztec/**/codegenCache.json
+
+# Log files
+*.log

@@ -10,6 +10,10 @@
 ## 📦 Installation
 
 ```bash
+# Using Bun (recommended)
+bun add @substancelabs/aztec-evm-bridge-sdk
+
+# Or using npm
 npm install @substancelabs/aztec-evm-bridge-sdk
 ```
 
@@ -72,8 +76,8 @@ const bridge = new Bridge({
 
 ```bash
 # Build the SDK
-yarn build
+bun build
 
 # Run tests
-yarn test
+bun test
 ```

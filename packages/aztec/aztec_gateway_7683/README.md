@@ -26,7 +26,7 @@ aztec-nargo compile
 ```
 
 ```bash
-yarn install
+bun install
 ```
 
 ### ⚠️ Important Warning
@@ -58,7 +58,7 @@ aztec codegen target --outdir src/artifacts
 ### Deploy
 
 ```bash
-NODE_NO_WARNINGS=1 node --loader ts-node/esm scripts/deploy \
+bun scripts/deploy.ts \
   0xYOUR_AZTEC_SECRET_KEY \
   0xYOUR_AZTEC_SALT \ 
   0xl2Gateway7683Address \
@@ -72,7 +72,7 @@ NODE_NO_WARNINGS=1 node --loader ts-node/esm scripts/deploy \
 To test the bridge flow **from Aztec Testnet to Base Sepolia**, run:
 
 ```bash
-node --no-warnings --loader ts-node/esm scripts/e2e/aztec-to-evm.ts \
+bun scripts/e2e/aztec-to-evm.ts \
   0xYOUR_AZTEC_SECRET_KEY \
   0xYOUR_AZTEC_SALT \
   0xAZTEC_GATEWAY_7683_ADDRESS \
@@ -89,7 +89,7 @@ node --no-warnings --loader ts-node/esm scripts/e2e/aztec-to-evm.ts \
 To test the bridge flow **from Base Sepolia to Aztec Testnet**, run:
 
 ```bash
-node --no-warnings --loader ts-node/esm scripts/e2e/evm-to-aztec.ts \
+bun scripts/e2e/evm-to-aztec.ts \
   0xYOUR_AZTEC_SECRET_KEY \
   0xYOUR_AZTEC_SALT \
   0xYOUR_EVM_PRIVATE_KEY \
@@ -115,7 +115,7 @@ You can get the addresses [HERE](https://substance-labs.gitbook.io/aztec-evm-bri
 If you need to deploy a test token on Aztec, run:
 
 ```bash
-node --no-warnings --loader ts-node/esm scripts/deploy-token.ts 
+bun scripts/deploy-token.ts 
 ```
 
 To modify token parameters, edit the `deploy-token.ts` file directly.
@@ -126,7 +126,7 @@ To modify token parameters, edit the `deploy-token.ts` file directly.
 To run the JavaScript-based tests for this contract:
 
 ```bash
-yarn test:js
+bun test:js
 ```
 
 Make sure you have installed the dependencies beforehand with:

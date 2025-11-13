@@ -31,7 +31,7 @@ const main = async () => {
     deploy: false,
   })
 
-  logger.info(`Account: ${account.getAddress().toString()}`)
+  logger.info(`Account: ${wallet.getAddress().toString()}`)
   logger.info(`Token address: ${tokenAddress}`)
   logger.info(`Amount to transfer: ${amount}`)
 
@@ -39,9 +39,9 @@ const main = async () => {
 
   logger.info(`Transferring ${amount} tokens from private to public...`)
   await token.methods
-    .transfer_to_public(account.getAddress(), account.getAddress(), BigInt(amount), 0n)
+    .transfer_private_to_public(wallet.getAddress(), wallet.getAddress(), BigInt(amount), 0n)
     .send({
-      from: account.getAddress(),
+      from: wallet.getAddress(),
       fee: { paymentMethod },
     })
     .wait({

@@ -1,7 +1,7 @@
 {
   "name": "aztec-evm-bridge",
   "private": true,
-  "packageManager": "yarn@4.9.2",
+  "packageManager": "bun@latest",
   "type": "module",
   "workspaces": [
     "packages/aztec/*",
@@ -9,17 +9,34 @@
     "packages/sdk"
   ],
   "scripts": {
-    "build": "yarn workspaces foreach --since run build",
-    "lint": "yarn workspaces foreach --since run lint",
-    "lint:fix": "yarn workspaces foreach --since run lint:fix",
-    "format": "yarn workspaces foreach --since run format",
+    "build": "bun run --filter='*' build",
+    "lint": "bun run --filter='*' lint",
+    "lint:fix": "bun run --filter='*' lint:fix",
+    "format": "bun run --filter='*' format",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "yarn build && changeset publish",
+    "release": "bun run build && changeset publish",
     "prepare": "husky",
     "postinstall": "husky install",
     "prepublishOnly": "pinst --disable",
-    "postpublish": "pinst --enable"
+    "postpublish": "pinst --enable",
+    "deploy:all": "bun scripts/deploy/deploy-all.ts",
+    "mint:aztec": "bun scripts/mint/mint-aztec.ts",
+    "mint:evm": "bun scripts/mint/mint-evm.ts",
+    "filler": "bun scripts/run-filler.ts"
+  },
+  "dependencies": {
+    "@aztec/accounts": "3.0.0-devnet.2",
+    "@aztec/aztec.js": "3.0.0-devnet.2",
+    "@aztec/foundation": "3.0.0-devnet.2",
+    "@aztec/kv-store": "3.0.0-devnet.2",
+    "@aztec/noir-contracts.js": "3.0.0-devnet.2",
+    "@aztec/pxe": "3.0.0-devnet.2",
+    "@aztec/stdlib": "3.0.0-devnet.2",
+    "@aztec/test-wallet": "3.0.0-devnet.2",
+    "@defi-wonderland/aztec-standards": "3.0.0-devnet.2",
+    "dotenv": "^16.5.0",
+    "viem": "^2.23.13"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.7",

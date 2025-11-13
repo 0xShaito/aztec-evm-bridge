@@ -7,7 +7,7 @@ This project uses [Changesets](https://github.com/changesets/changesets) to mana
 When you make changes that should trigger a version bump, create a changeset:
 
 ```bash
-yarn changeset
+bun changeset
 ```
 
 This will prompt you to:
@@ -28,7 +28,7 @@ The changeset will be saved in `.changeset/` directory and should be committed w
 ### 1. Version Packages
 
 ```bash
-yarn version
+bun version
 ```
 
 This will:
@@ -49,7 +49,7 @@ git commit -m "chore: version packages"
 ### 3. Publish to npm
 
 ```bash
-yarn release
+bun release
 ```
 
 This will:
@@ -99,18 +99,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: 20
+          bun-version: latest
 
       - name: Install Dependencies
-        run: yarn install --immutable
+        run: bun install --frozen-lockfile
 
       - name: Create Release Pull Request or Publish
         uses: changesets/action@v1
         with:
-          publish: yarn release
+          publish: bun release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

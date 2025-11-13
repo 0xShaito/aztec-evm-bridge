@@ -4,7 +4,7 @@ This guide explains how to configure and operate the filler so it can automatica
 
 ## Prerequisites
 
-- Node.js (use the version from `.nvmrc`) and Yarn installed locally.
+- **Bun** (latest version) installed locally.
 - Access to the Aztec sandbox (via `aztec start sandbox`) or a remote Aztec node.
 - A funded EVM L2 (Base Sepolia) account with the tokens the filler will spend.
 - EVM L2 RPC endpoints that support filter-based log queries (`eth_newFilter` / contract event filters). Some public RPCs disable this; use an archive-capable provider that allows `createContractEventFilter`.
@@ -15,8 +15,7 @@ This guide explains how to configure and operate the filler so it can automatica
 
 ```bash
 cd packages/filler
-nvm use
-yarn install
+bun install
 ```
 
 ## Environment Configuration
@@ -41,27 +40,19 @@ The most important options are:
 | `OP_STACK_ANCHOR_REGISTRY_ADDRESS`, `AZTEC_ROLLUP_CONTRACT_L1_ADDRESS` | Used when forwarding settlements to Aztec/L2. Optional in sandbox. |
 | `AZTEC_SANDBOX` | Set to `true` when running against the sandbox so settlement forwarding skips the rollup proof requirement. |
 
-## Sync Contract Artifacts
+## Contract Artifacts
 
-The filler embeds the Aztec gateway artifact generated in `packages/aztec/aztec_gateway_7683`. Whenever that project is rebuilt, copy the updated files into the filler before compiling:
-
-```bash
-# from packages/filler
-cp ../aztec/aztec_gateway_7683/src/artifacts/AztecGateway7683.ts src/artifacts/AztecGateway7683/
-cp ../aztec/aztec_gateway_7683/target/aztec_gateway_7683-AztecGateway7683.json src/artifacts/AztecGateway7683/
-```
-
-These copies keep the filler’s TypeScript bindings and bytecode in sync with the deployed Aztec gateway contract.
+The filler imports artifacts directly from `packages/aztec/aztec_gateway_7683/src/artifacts/` to ensure it always uses the same artifacts as the deployment script. No manual syncing is required - the filler will automatically use the latest compiled artifacts from the aztec package.
 
 ## Build and Run
 
 1. Compile the TypeScript sources:
    ```bash
-    yarn build
+    bun build
    ```
 2. Start the filler:
    ```bash
-    yarn start
+    bun start
    ```
 
 The filler will bootstrap a PXE instance, register the necessary contracts, and start two watchers:

@@ -31,7 +31,8 @@ import forwarderAbi from "../abis/forwarder.js"
 import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
 import anchorRegistryAbi from "../abis/anchorRegistry.js"
 import rollupAbi from "../abis/rollup.js"
-import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+// Import contract class dynamically to avoid module load-time errors
+// We'll import it when needed instead of at module load time
 
 import type { Chain } from "viem"
 import type { BaseServiceOpts } from "./base.service.js"
@@ -113,7 +114,9 @@ class SettlementService extends BaseService {
 
   async forwardOrderSettlements() {
     try {
-      this.logger.info("looking for forwarding order settlements ....")
+      if (!this.silent) {
+        this.logger.info("looking for forwarding order settlements ....")
+      }
       const orders = await this.db
         .collection("orders")
         .find({
@@ -232,10 +235,10 @@ class SettlementService extends BaseService {
     try {
       this.logger.info(`forwarding settlement to L2 for order ${order.orderId} ...`)
 
-      const gateway = await AztecGateway7683Contract.at(
-        AztecAddress.fromString(this.aztecGatewayAddress),
-        this.aztecWallet,
-      )
+      const { Contract } = await import("@aztec/aztec.js/contracts")
+      const { getAztecGateway7683ContractArtifact } = await import("../utils/aztec.js")
+      const artifact = await getAztecGateway7683ContractArtifact()
+      const gateway = await Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), artifact, this.aztecWallet)
 
       const message = [
         Buffer.from(SETTLE_ORDER_TYPE.slice(2), "hex"),
@@ -346,7 +349,9 @@ class SettlementService extends BaseService {
 
   async settleOrders() {
     try {
-      this.logger.info("looking for settlable orders ....")
+      if (!this.silent) {
+        this.logger.info("looking for settlable orders ....")
+      }
       const orders = await this.db
         .collection("orders")
         .find({

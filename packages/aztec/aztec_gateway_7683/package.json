@@ -10,15 +10,15 @@
     "codegen": "aztec codegen target --outdir src/artifacts --force",
     "postprocess": "aztec-postprocess-contract",
     "compile": "${AZTEC_NARGO:-aztec-nargo} compile",
-    "deploy": "node --loader ts-node/esm scripts/deploy.ts",
+    "deploy": "bun scripts/deploy.ts",
     "format": "prettier --write \"src/ts/**/*.ts\" \"scripts/**/*.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "yarn test:js && yarn test:nr",
-    "test:js": "NODE_NO_WARNINGS=1 node --experimental-vm-modules $(yarn bin jest) --no-cache --runInBand --config jest.integration.config.json",
+    "test": "bun test:js && bun test:nr",
+    "test:js": "bunx jest --no-cache --runInBand --config jest.integration.config.json",
     "test:nr": "aztec test",
-    "update": "aztec update --contract . && ./.github/scripts/update_contract.sh $(grep -oP 'tag\\s*=\\s*\"\\K[^\"]+' \"Nargo.toml\" | head -1) && yarn && yarn update-readme-version",
-    "update-readme-version": "node ./.github/scripts/update-readme-version.js"
+    "update": "aztec update --contract . && ./.github/scripts/update_contract.sh $(grep -oP 'tag\\s*=\\s*\"\\K[^\"]+' \"Nargo.toml\" | head -1) && bun install && bun update-readme-version",
+    "update-readme-version": "bun ./.github/scripts/update-readme-version.js"
   },
   "dependencies": {
     "@aztec/accounts": "3.0.0-devnet.2",
@@ -28,6 +28,7 @@
     "@aztec/pxe": "3.0.0-devnet.2",
     "@aztec/stdlib": "3.0.0-devnet.2",
     "@aztec/test-wallet": "3.0.0-devnet.2",
+    "@defi-wonderland/aztec-standards": "3.0.0-devnet.2",
     "viem": "^2.23.13"
   },
   "devDependencies": {
@@ -38,7 +39,6 @@
     "jest": "^29.7.0",
     "prettier": "^3.6.2",
     "ts-jest": "^29.1.1",
-    "ts-node": "^10.9.2",
     "typescript": "^5.4.4"
   },
   "resolutions": {
@@ -48,5 +48,5 @@
   "jest": {
     "testTimeout": 200000
   },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "packageManager": "bun@latest"
 }

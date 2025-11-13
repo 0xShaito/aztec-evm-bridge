@@ -54,6 +54,7 @@
     "@aztec/noir-contracts.js": "3.0.0-devnet.2",
     "@aztec/pxe": "3.0.0-devnet.2",
     "@aztec/stdlib": "3.0.0-devnet.2",
+    "@defi-wonderland/aztec-standards": "3.0.0-devnet.2",
     "@lodestar/types": "^1.33.0",
     "viem": "^2.33.2"
   },
@@ -66,5 +67,6 @@
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
-  }
+  },
+  "packageManager": "bun@latest"
 }

@@ -183,7 +183,7 @@ export class AztecToEvmOperations {
       await wallet.registerContract({ instance: tokenInstance, artifact: TokenContractArtifact })
       const orderDataEncoder = new OrderDataEncoder({
         ...baseOrderData,
-        sender: isPrivate ? PRIVATE_SENDER : account.getAddress().toString(),
+        sender: isPrivate ? PRIVATE_SENDER : wallet.getAddress().toString(),
       })
 
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
@@ -192,8 +192,8 @@ export class AztecToEvmOperations {
       if (isPrivate) {
         witness = await account.createAuthWit({
           caller: AztecAddress.fromString(gatewayIn),
-          action: token.methods.transfer_to_public(
-            account.getAddress(),
+          action: token.methods.transfer_private_to_public(
+            wallet.getAddress(),
             AztecAddress.fromString(gatewayIn),
             amountIn,
             nonce,
@@ -202,11 +202,11 @@ export class AztecToEvmOperations {
       } else {
         await (
           await wallet.setPublicAuthWit(
-            account.getAddress(),
+            wallet.getAddress(),
             {
               caller: AztecAddress.fromString(gatewayIn),
-              action: token.methods.transfer_in_public(
-                account.getAddress(),
+              action: token.methods.transfer_public_to_public(
+                wallet.getAddress(),
                 AztecAddress.fromString(gatewayIn),
                 amountIn,
                 nonce,
@@ -230,7 +230,7 @@ export class AztecToEvmOperations {
           authWitnesses: witness ? [witness] : [],
         })
         .send({
-          from: account.getAddress(),
+          from: wallet.getAddress(),
           fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
         })
         .wait({
@@ -322,7 +322,7 @@ export class AztecToEvmOperations {
       const account = await this.#getAztecAccount()
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
       status = parseInt(
-        await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate({ from: account.getAddress() }),
+        await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate({ from: wallet.getAddress() }),
       )
     }
 

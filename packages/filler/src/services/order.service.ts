@@ -1,12 +1,13 @@
 import { erc20Abi, padHex, sliceHex } from "viem"
 import { AztecAddress } from "@aztec/aztec.js/addresses"
 import { Fr } from "@aztec/aztec.js/fields"
-import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { TokenContract, TokenContractArtifact } from "@defi-wonderland/aztec-standards/current/artifacts/Token.js"
 import { Mutex } from "async-mutex"
 import { waitForTransactionReceipt } from "viem/actions"
 
 import { getPaymentMethod, registerContractWithoutInstance } from "../utils/aztec.js"
-import { AztecGateway7683Contract } from "../artifacts/AztecGateway7683/AztecGateway7683.js"
+// Import contract class dynamically to avoid module load-time errors
+// We'll import it when needed instead of at module load time
 import l2Gateway7683Abi from "../abis/l2Gateway7683.js"
 import {
   AZTEC_7683_CHAIN_ID,
@@ -76,10 +77,10 @@ class OrderService extends BaseService {
         return
       }
 
-      const gateway = await AztecGateway7683Contract.at(
-        AztecAddress.fromString(this.aztecGatewayAddress),
-        this.aztecWallet,
-      )
+      const { Contract } = await import("@aztec/aztec.js/contracts")
+      const { getAztecGateway7683ContractArtifact } = await import("../utils/aztec.js")
+      const artifact = await getAztecGateway7683ContractArtifact()
+      const gateway = await Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), artifact, this.aztecWallet)
 
       const orderIds = orders.map(({ orderId }) => orderId)
       const newOrdersStatus = await Promise.all(
@@ -231,14 +232,22 @@ class OrderService extends BaseService {
 
   async fillEvmOrderFromLog(log: Log): Promise<void> {
     const release = await this.fillEvmOrderFromLogMutex.acquire()
+    // Declare variables outside try block so they're accessible in catch
+    let orderId: string | undefined
+    let maxSpentAmount: bigint | undefined
+    let maxSpentToken: string | undefined
+    let maxSpentRecipient: string | undefined
+    let nextOrderStatus: string | undefined
+
     try {
       const {
         args: {
-          orderId,
+          orderId: orderIdFromLog,
           resolvedOrder: { fillInstructions, maxSpent, minReceived },
         },
       } = log as any
 
+      orderId = orderIdFromLog
       this.logger.info(`new order detected on ${this.l2EvmChain.name}. order id: ${orderId}. processing it ...`)
       if (await this.db.collection("orders").findOne({ orderId })) {
         this.logger.info(`order ${orderId} already processed. skipping it ...`)
@@ -250,9 +259,9 @@ class OrderService extends BaseService {
       const minReceivedToken = minReceived[0].token
       // const minReceivedRecipient = minReceived[0].recipient
       // const minReceivedChainId = minReceived[0].chainId
-      const maxSpentAmount = maxSpent[0].amount
-      const maxSpentToken = maxSpent[0].token
-      const maxSpentRecipient = maxSpent[0].recipient
+      maxSpentAmount = maxSpent[0].amount
+      maxSpentToken = maxSpent[0].token
+      maxSpentRecipient = maxSpent[0].recipient
       const maxSpentChainId = maxSpent[0].chainId
 
       // TODO: check if minReceivedToken is supported
@@ -263,39 +272,197 @@ class OrderService extends BaseService {
         `swapping from ${this.l2EvmChain.name} to Aztec ${minReceivedAmount} ${minReceivedToken} for ${maxSpentAmount} ${maxSpentToken} to ${maxSpentRecipient}...`,
       )
 
+      // Try to register the token contract
       try {
         this.logger.info("registering token contract into the PXE ...")
         await registerContractWithoutInstance(AztecAddress.fromString(maxSpentToken), {
           artifact: TokenContractArtifact,
         })
-      } catch (err) {
-        console.log("Error occurred while registering token contract:")
-        this.logger.error(err)
+        this.logger.info("✅ Token contract registered successfully")
+      } catch (err: any) {
+        this.logger.warn(`⚠️  Could not register token contract with standard artifact: ${err.message}`)
+        this.logger.info("Attempting to register token contract instance without artifact validation...")
+        // Try to register just the instance - this will work if the artifact is already registered
+        try {
+          const node = await import("@aztec/aztec.js/node").then((m) =>
+            m.createAztecNodeClient(process.env.AZTEC_RPC_URL || "http://localhost:8080"),
+          )
+          const contractInstance = await node.getContract(AztecAddress.fromString(maxSpentToken))
+          if (contractInstance) {
+            const pxe = await import("../utils/aztec.js").then((m) => m.getPxe())
+            await pxe.registerContract({
+              instance: contractInstance as any,
+            })
+            this.logger.info("✅ Token contract instance registered (artifact was already registered)")
+          }
+        } catch (err2: any) {
+          this.logger.warn(`⚠️  Could not register token contract instance: ${err2.message}`)
+          this.logger.warn("The token contract may need to be registered manually or the artifact may be incompatible")
+        }
       }
 
-      console.log("Contracts registered. Preparing to fill order...")
+      // Log all addresses for debugging
+      this.logger.info(`Order details:`)
+      this.logger.info(`  - maxSpentToken: ${maxSpentToken}`)
+      this.logger.info(`  - maxSpentRecipient: ${maxSpentRecipient}`)
+      this.logger.info(`  - minReceivedToken: ${minReceivedToken}`)
+      this.logger.info(`  - aztecGatewayAddress: ${this.aztecGatewayAddress}`)
 
-      const [token, aztecGateway] = await Promise.all([
-        TokenContract.at(AztecAddress.fromString(maxSpentToken), this.aztecWallet),
-        AztecGateway7683Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), this.aztecWallet),
-      ])
+      // Try to get the token contract - it may work even if registration had warnings
+      let token
+      try {
+        this.logger.info(`Attempting to get token contract at ${maxSpentToken}...`)
+        token = await TokenContract.at(AztecAddress.fromString(maxSpentToken), this.aztecWallet)
+        this.logger.info(`✅ Successfully retrieved token contract at ${maxSpentToken}`)
+      } catch (err: any) {
+        this.logger.error(`Failed to get token contract: ${err.message}`)
+        this.logger.error(`Token address used: ${maxSpentToken}`)
+        this.logger.error(`Recipient address: ${maxSpentRecipient}`)
+        if (err.message?.includes("has not been registered")) {
+          // Check if the error message contains a different address than what we're trying
+          const errorAddressMatch = err.message.match(/0x[a-fA-F0-9]{64}/)
+          if (errorAddressMatch && errorAddressMatch[0] !== maxSpentToken) {
+            this.logger.error(
+              `⚠️  Address mismatch detected! Error mentions ${errorAddressMatch[0]} but we're accessing ${maxSpentToken}`,
+            )
+            // Check if the error address matches the recipient
+            if (errorAddressMatch[0] === maxSpentRecipient) {
+              throw new Error(
+                `The error mentions the recipient address (${maxSpentRecipient}) instead of the token address (${maxSpentToken}). ` +
+                  `This suggests that maxSpentToken might be incorrectly set to the recipient address. ` +
+                  `Please verify the order data structure. Original error: ${err.message}`,
+              )
+            }
+            throw new Error(
+              `Token contract registration error: The error mentions address ${errorAddressMatch[0]} ` +
+                `but we're trying to access ${maxSpentToken}. ` +
+                `This suggests a mismatch in the order data. ` +
+                `Original error: ${err.message}`,
+            )
+          }
+          throw new Error(
+            `Token contract at ${maxSpentToken} is not registered in PXE. ` +
+              `This may be due to a class ID mismatch. Please ensure the token contract matches the expected artifact. ` +
+              `Original error: ${err.message}`,
+          )
+        }
+        throw err
+      }
 
-      console.log("Preparing to fill order:", orderId)
+      this.logger.info(`Getting Aztec Gateway contract at ${this.aztecGatewayAddress}...`)
+      let aztecGateway
+      try {
+        const { Contract } = await import("@aztec/aztec.js/contracts")
+        const { getAztecGateway7683ContractArtifact } = await import("../utils/aztec.js")
+        const artifact = await getAztecGateway7683ContractArtifact()
+        aztecGateway = await Contract.at(AztecAddress.fromString(this.aztecGatewayAddress), artifact, this.aztecWallet)
+        this.logger.info(`✅ Successfully retrieved Aztec Gateway contract`)
+      } catch (err: any) {
+        if (err.message?.includes("has not been registered")) {
+          this.logger.warn(`⚠️  Gateway contract not registered, attempting to register now...`)
+          // Try to register the gateway contract dynamically
+          try {
+            const { getPxe, getAztecGateway7683ContractArtifact } = await import("../utils/aztec.js")
+            const AztecGateway7683ContractArtifact = await getAztecGateway7683ContractArtifact()
+            const node = await import("@aztec/aztec.js/node").then((m) =>
+              m.createAztecNodeClient(process.env.AZTEC_RPC_URL || "http://localhost:8080"),
+            )
+            const pxe = getPxe()
 
+            // Get the contract instance from the node
+            const gatewayInstance = await node.getContract(AztecAddress.fromString(this.aztecGatewayAddress))
+            if (!gatewayInstance) {
+              throw new Error(`Gateway contract not found on node at ${this.aztecGatewayAddress}`)
+            }
+
+            // Check class IDs
+            const { getContractClassFromArtifact } = await import("@aztec/aztec.js/contracts")
+            const artifactClass = await getContractClassFromArtifact(AztecGateway7683ContractArtifact)
+            const instanceClassId = gatewayInstance.currentContractClassId
+
+            if (!instanceClassId.equals(artifactClass.id)) {
+              this.logger.warn(
+                `⚠️  Gateway contract class ID mismatch! ` +
+                  `Instance: ${instanceClassId.toString()}, ` +
+                  `Expected: ${artifactClass.id.toString()}. ` +
+                  `Attempting to get artifact from node...`,
+              )
+              // Try to get the artifact from the node
+              try {
+                const classMetadata = await pxe.getContractClassMetadata(instanceClassId, true)
+                if (classMetadata?.artifact) {
+                  await pxe.registerContract({
+                    instance: gatewayInstance as any,
+                    artifact: classMetadata.artifact,
+                  })
+                  this.logger.info(
+                    `✅ Gateway contract registered using artifact from node (class ID: ${instanceClassId.toString()})`,
+                  )
+                } else {
+                  throw new Error("Contract class metadata not available from node")
+                }
+              } catch (err3: any) {
+                this.logger.warn(`Could not get gateway contract class from node: ${err3.message}`)
+                // Try registering without artifact - requires artifact to be pre-registered
+                try {
+                  await pxe.registerContract({
+                    instance: gatewayInstance as any,
+                  })
+                  this.logger.info(
+                    `✅ Gateway contract instance registered (artifact may need to be registered separately)`,
+                  )
+                } catch (err4: any) {
+                  throw new Error(
+                    `Failed to register gateway contract: Class ID mismatch and could not get artifact from node. ` +
+                      `Instance class ID: ${instanceClassId.toString()}, Artifact class ID: ${artifactClass.id.toString()}. ` +
+                      `Error: ${err4.message}`,
+                  )
+                }
+              }
+            } else {
+              // Class IDs match - register normally
+              const { registerContractWithoutInstance } = await import("../utils/aztec.js")
+              await registerContractWithoutInstance(AztecAddress.fromString(this.aztecGatewayAddress), {
+                artifact: AztecGateway7683ContractArtifact,
+              })
+              this.logger.info(`✅ Gateway contract registered successfully`)
+            }
+
+            // Try again
+            const { Contract } = await import("@aztec/aztec.js/contracts")
+            aztecGateway = await Contract.at(
+              AztecAddress.fromString(this.aztecGatewayAddress),
+              AztecGateway7683ContractArtifact,
+              this.aztecWallet,
+            )
+            this.logger.info(`✅ Successfully retrieved Aztec Gateway contract after registration`)
+          } catch (err2: any) {
+            this.logger.error(`Failed to register gateway contract: ${err2.message}`)
+            throw new Error(
+              `Gateway contract at ${this.aztecGatewayAddress} is not registered in PXE and could not be registered. ` +
+                `Please ensure the gateway contract is deployed and the artifact matches. ` +
+                `Original error: ${err.message}, Registration error: ${err2.message}`,
+            )
+          }
+        } else {
+          throw err
+        }
+      }
+
+      // Determine order status
       const orderType = `0x${originData.slice(538, 540)}`
-      const nextOrderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_FILLED_PRIVATELY : ORDER_STATUS_FILLED
+      nextOrderStatus = orderType === PRIVATE_ORDER_HEX ? ORDER_STATUS_FILLED_PRIVATELY : ORDER_STATUS_FILLED
       const fillerData = padHex(this.evmMultiClient.getClientByChain(this.l2EvmChain).account!.address)
-
-      console.log("Filler data prepared:", fillerData)
 
       let receipt
       const paymentMethod = await getPaymentMethod()
       const nonce = Fr.fromHexString(`0x${originData.slice(386, 450)}`)
+
       if (nextOrderStatus === ORDER_STATUS_FILLED_PRIVATELY) {
         this.logger.info(`creating authwit to fill the order ${orderId} ...`)
         const witness = await this.aztecAccount.createAuthWit({
           caller: AztecAddress.fromString(this.aztecGatewayAddress),
-          action: token.methods.transfer_to_public(
+          action: token.methods.transfer_private_to_public(
             this.aztecAccount.getAddress(),
             AztecAddress.fromString(this.aztecGatewayAddress),
             maxSpentAmount,
@@ -318,12 +485,13 @@ class OrderService extends BaseService {
       } else {
         this.logger.info(`setting public authwit to fill the order ${orderId} ...`)
         const recipient = `0x${originData.slice(66, 66 + 64)}`
+        // @ts-ignore
         await (
           await this.aztecWallet.setPublicAuthWit(
             this.aztecAccount.getAddress(),
             {
               caller: AztecAddress.fromString(this.aztecGatewayAddress),
-              action: token.methods.transfer_in_public(
+              action: token.methods.transfer_public_to_public(
                 this.aztecAccount.getAddress(),
                 AztecAddress.fromString(recipient),
                 maxSpentAmount,
@@ -351,6 +519,14 @@ class OrderService extends BaseService {
           })
       }
 
+      // Check if transaction was successful
+      if (receipt.status !== "success") {
+        const errorMsg = receipt.error || "Unknown error"
+        throw new Error(
+          `Transaction ${receipt.txHash.toString()} failed with status ${receipt.status}. Error: ${errorMsg}`,
+        )
+      }
+
       this.logger.info(
         `order ${orderId} filled succesfully. tx hash: Aztec:${receipt.txHash.toString()}. storing it ...`,
       )
@@ -361,9 +537,60 @@ class OrderService extends BaseService {
         log: (log as any).args,
         orderStatus: nextOrderStatus,
       })
-    } catch (err) {
-      console.log("Error occurred while filling order:")
-      this.logger.error(err)
+    } catch (err: any) {
+      this.logger.error("Error occurred while filling order:")
+
+      // Try to extract detailed error information
+      let errorDetails = {
+        message: err?.message || String(err),
+        orderId: orderId || "unknown",
+        orderType:
+          nextOrderStatus === ORDER_STATUS_FILLED_PRIVATELY
+            ? "private"
+            : nextOrderStatus === ORDER_STATUS_FILLED
+              ? "public"
+              : "unknown",
+        maxSpentAmount: maxSpentAmount?.toString() || "unknown",
+        maxSpentToken: maxSpentToken || "unknown",
+        maxSpentRecipient: maxSpentRecipient || "unknown",
+        aztecGatewayAddress: this.aztecGatewayAddress,
+      }
+
+      // Check if error has a receipt property (from .wait() call)
+      if (err?.receipt) {
+        const receipt = err.receipt
+        errorDetails = {
+          ...errorDetails,
+          txHash: receipt.txHash?.toString(),
+          status: receipt.status,
+          error: receipt.error,
+          blockNumber: receipt.blockNumber,
+          blockHash: receipt.blockHash?.toString(),
+        }
+        this.logger.error(`Transaction receipt details:`, errorDetails)
+      } else if (err?.txHash) {
+        // Error might have txHash directly
+        errorDetails = {
+          ...errorDetails,
+          txHash: err.txHash.toString(),
+          status: err.status,
+          error: err.error || err.message,
+        }
+        this.logger.error(`Transaction error details:`, errorDetails)
+      } else {
+        // Log the error object structure for debugging
+        this.logger.error(`Error details:`, errorDetails)
+        this.logger.error(`Full error object:`, {
+          name: err?.name,
+          message: err?.message,
+          stack: err?.stack,
+          cause: err?.cause,
+          ...(typeof err === "object" ? Object.keys(err) : []),
+        })
+      }
+
+      // Re-throw with more context
+      throw err
     } finally {
       release()
     }
