@@ -13,14 +13,13 @@ const [
   aztecSalt,
   tokenAddress,
   recipientAddress,
-  amountPrivate = "1000000000000000000",
   amountPublic = "1000000000000000000",
   rpcUrl = "https://devnet.aztec-labs.com",
 ] = process.argv
 
 const main = async () => {
-  const logger = createLogger("mint-tokens")
-  logger.info("Starting token mint...")
+  const logger = createLogger("mint-tokens-public")
+  logger.info("Starting token mint to public balance...")
 
   const wallet = await getTestWallet(rpcUrl)
   const paymentMethod = new SponsoredFeePaymentMethod(await getSponsoredFPCAddress())
@@ -39,35 +38,18 @@ const main = async () => {
 
   const token = await TokenContract.at(AztecAddress.fromString(tokenAddress), wallet)
 
-  if (amountPrivate && BigInt(amountPrivate) > 0n) {
-    logger.info(`Minting ${amountPrivate} tokens to private balance...`)
-    await token.methods
-      .mint_to_private(AztecAddress.fromString(recipientAddress), BigInt(amountPrivate))
-      .send({
-        from: minterAccount.getAddress(),
-        fee: { paymentMethod },
-      })
-      .wait({
-        timeout: 120000,
-      })
-    logger.info(`✅ Minted ${amountPrivate} tokens to private balance`)
-  }
+  logger.info(`Minting ${amountPublic} tokens to public balance...`)
+  await token.methods
+    .mint_to_public(AztecAddress.fromString(recipientAddress), BigInt(amountPublic))
+    .send({
+      from: minterAccount.getAddress(),
+      fee: { paymentMethod },
+    })
+    .wait({
+      timeout: 120000,
+    })
 
-  if (amountPublic && BigInt(amountPublic) > 0n) {
-    logger.info(`Minting ${amountPublic} tokens to public balance...`)
-    await token.methods
-      .mint_to_public(AztecAddress.fromString(recipientAddress), BigInt(amountPublic))
-      .send({
-        from: minterAccount.getAddress(),
-        fee: { paymentMethod },
-      })
-      .wait({
-        timeout: 120000,
-      })
-    logger.info(`✅ Minted ${amountPublic} tokens to public balance`)
-  }
-
-  logger.info(`✅ All tokens successfully minted to ${recipientAddress}`)
+  logger.info(`✅ ${amountPublic} tokens successfully minted to public balance of ${recipientAddress}`)
 }
 
 main().catch((err) => {

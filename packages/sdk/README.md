@@ -17,53 +17,52 @@ npm install @substancelabs/aztec-evm-bridge-sdk
 
 ## 🚀 Quick Start
 
-Here's a basic example showing how to initiate a openOrder **from Aztec to Base**:
+Here's a basic example showing how to initiate an order **from Aztec to Base**:
 
 ```ts
 import { Bridge, aztecSepolia } from "@substancelabs/aztec-evm-bridge-sdk"
-import { createAztecNodeClient, waitForPXE } from "@aztec/aztec.js"
-import { createStore } from "@aztec/kv-store/lmdb"
-import { getPXEServiceConfig } from "@aztec/pxe/config"
-import { createPXEService } from "@aztec/pxe/server"
-import { Chain, padHex } from "viem"
+import { padHex } from "viem"
 import { baseSepolia } from "viem/chains"
-
-const node = await createAztecNodeClient("https://aztec-alpha-testnet-fullnode.zkv.xyz")
-const fullConfig = {
-  ...getPXEServiceConfig(),
-  l1Contracts: await node.getL1ContractAddresses(),
-  proverEnabled: true,
-}
-const store = await createStore("pxe", {
-  dataDirectory: "store",
-  dataStoreMapSizeKB: 1e6,
-})
-const pxe = await createPXEService(node, fullConfig, {
-  store,
-  useLogSuffix: true,
-})
-await waitForPXE(pxe)
 
 const bridge = new Bridge({
   evmPrivateKey: "0x...",
   aztecSecretKey: "0x...",
   aztecKeySalt: "0x...",
-  aztecPxe: pxe,
+  aztecNodeUrl: "https://devnet.aztec-labs.com",
+  aztecPxeStoreDirectory: "./store/pxe", // Optional: defaults to ./store
+  beaconApiUrl: "https://beacon.ethpandaops.io", // Optional: required for forward operations
 })
+
 bridge
   .openOrder({
     chainIdIn: aztecSepolia.id,
     chainIdOut: baseSepolia.id,
     amountIn: 1n,
-    amountOut: 1n, // amountOut must be less than amountIn. It should count the slippage
-    tokenIn: "0x...",
-    tokenOut: "0x...", 
-    mode: "private", // privateWithHook, public, or publicWithHook
-    data: padHex("0x"),
-    recipient: padHex("0x"),
+    amountOut: 1n, // amountOut must be less than amountIn to account for slippage
+    tokenIn: "0x...", // 32-byte hex token address
+    tokenOut: "0x...", // 20-byte EVM address, padded to 32 bytes
+    mode: "private", // Options: "private", "privateWithHook", "public", "publicWithHook"
+    data: padHex("0x"), // 32-byte hex for additional data
+    recipient: padHex("0x"), // 32-byte hex recipient address
   })
-  .then(console.log)
+  .then((result) => {
+    console.log("Order opened:", result.orderId)
+    console.log("Transaction hash:", result.txHash)
+  })
   .catch(console.error)
+```
+
+### Alternative: Using Azguard Wallet
+
+```ts
+import { AzguardClient } from "@azguardwallet/client"
+
+const azguardClient = new AzguardClient(/* your config */)
+
+const bridge = new Bridge({
+  evmPrivateKey: "0x...",
+  azguardClient, // Use Azguard instead of aztecSecretKey/aztecKeySalt/aztecNodeUrl
+})
 ```
 
 ---

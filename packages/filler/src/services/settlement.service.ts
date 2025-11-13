@@ -423,7 +423,6 @@ class SettlementService extends BaseService {
       // Parse the beacon block from JSON
       const beaconBlock = beaconData.data.message
       const l1BlockNumber = BigInt(beaconBlock.body.execution_payload.block_number)
-      console.log("l1BlockNumber", l1BlockNumber)
 
       const stateRootInclusionProof = getExecutionStateRootProof(beaconBlock)
       const storageKey = keccak256(

@@ -1,5 +1,5 @@
 import { decodeAbiParameters, Hex, Log, TransactionReceipt } from "viem"
-import { Fr } from "@aztec/aztec.js"
+import { Fr } from "@aztec/aztec.js/fields"
 
 import l2Gateway7683Abi from "./abi/l2Gateway7683"
 
