@@ -126,12 +126,61 @@ export const addAccountWithSecretKey = async ({
   const salt = Fr.fromHexString(s)
   const secretKey = Fr.fromHexString(sk)
   const accountContract = await testWallet.createSchnorrAccount(secretKey, salt)
+  const account = await accountContract.getAccount()
+  const accountAddress = account.getAddress()
+
   if (deploy) {
     if (!paymentMethod) {
       throw new Error("paymentMethod is required when deploy is true")
     }
+
+    const { createLogger } = await import("@aztec/foundation/log")
+    const logger = createLogger("deploy-account")
+
+    // Check if account is already deployed
+    try {
+      const node = (testWallet as any).node
+      if (node) {
+        const contractInstance = await node.getContract(accountAddress)
+        if (contractInstance) {
+          logger.info(`Account ${accountAddress.toString()} is already deployed, skipping deployment`)
+          return account
+        }
+      }
+    } catch (error: any) {
+      // If we can't check, proceed with deployment attempt
+      logger.info("Could not verify account deployment status, attempting deployment...")
+    }
+
+    logger.info("Deploying account contract on-chain...")
+    logger.info("This may take 30-60 seconds (proof generation + mining)")
+
     const deployMethod = await accountContract.getDeployMethod()
-    await deployMethod.send({ from: AztecAddress.ZERO, fee: { paymentMethod } }).wait()
+    const deployOptions = { from: AztecAddress.ZERO, fee: { paymentMethod } }
+
+    // Set up a simple progress indicator
+    const progressInterval = setInterval(() => {
+      logger.info("Still waiting for account deployment...")
+    }, 15000) // Every 15 seconds
+
+    try {
+      const receipt = await deployMethod.send(deployOptions).wait()
+      clearInterval(progressInterval)
+      logger.info(`✅ Account deployed successfully (tx: ${receipt.txHash.toString()})`)
+    } catch (error: any) {
+      clearInterval(progressInterval)
+
+      // Check if error is due to account already being deployed
+      if (error?.message?.includes("Existing nullifier") || error?.cause?.message?.includes("Existing nullifier")) {
+        logger.info(`Account ${accountAddress.toString()} is already deployed (existing nullifier detected)`)
+        logger.info("Skipping deployment and using existing account")
+        return account
+      }
+
+      logger.error(`❌ Account deployment failed: ${error.message}`)
+      throw error
+    }
   }
-  return await accountContract.getAccount()
+
+  return account
 }
