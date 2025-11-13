@@ -1,15 +1,12 @@
-import {
-  Fr,
-  ContractInstanceWithAddress,
-  getContractInstanceFromDeployParams,
-  SponsoredFeePaymentMethod,
-} from "@aztec/aztec.js"
-import { SponsoredFPCContract } from "@aztec/noir-contracts.js/SponsoredFPC"
+import { Fr } from "@aztec/aztec.js/fields"
+import { getContractInstanceFromInstantiationParams, type ContractInstanceWithAddress } from "@aztec/aztec.js/contracts"
+import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee"
+import { SponsoredFPCContract, SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC"
 
 const SPONSORED_FPC_SALT = new Fr(0)
 
 export async function getSponsoredFPCInstance(): Promise<ContractInstanceWithAddress> {
-  return await getContractInstanceFromDeployParams(SponsoredFPCContract.artifact, {
+  return await getContractInstanceFromInstantiationParams(SponsoredFPCContractArtifact, {
     salt: SPONSORED_FPC_SALT,
   })
 }
