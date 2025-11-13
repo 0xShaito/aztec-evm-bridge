@@ -6,7 +6,7 @@
   "author": "Substance Labs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/substance-labs/aztec-evm-bridge.git",
+    "url": "git+https://github.com/substance-labs/aztec-evm-bridge.git",
     "directory": "packages/sdk"
   },
   "keywords": [

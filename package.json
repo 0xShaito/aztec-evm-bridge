@@ -9,6 +9,7 @@
     "packages/sdk"
   ],
   "scripts": {
+    "build": "yarn workspaces foreach --since run build",
     "lint": "yarn workspaces foreach --since run lint",
     "lint:fix": "yarn workspaces foreach --since run lint:fix",
     "format": "yarn workspaces foreach --since run format",
