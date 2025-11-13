@@ -16,12 +16,19 @@ import {
 } from "viem"
 import * as evmChains from "viem/chains"
 import { computeL2ToL1MessageHash } from "@aztec/stdlib/hash"
-import { AztecAddress, Fr, PXE, TxHash, sleep, TxReceipt, EthAddress, createAztecNodeClient } from "@aztec/aztec.js"
+import { AztecAddress, EthAddress } from "@aztec/aztec.js/addresses"
+import { Fr } from "@aztec/aztec.js/fields"
+import { createAztecNodeClient } from "@aztec/aztec.js/node"
+import { TxHash, TxReceipt } from "@aztec/aztec.js/tx"
+import { sleep } from "@aztec/foundation/sleep"
 import { AzguardClient } from "@azguardwallet/client"
 import { OkResult, SendTransactionResult, SimulateViewsResult } from "@azguardwallet/types"
 import { deriveSigningKey } from "@aztec/stdlib/keys"
-import { getSchnorrAccount, SchnorrAccountContractArtifact } from "@aztec/accounts/schnorr"
+import { TestWallet } from "@aztec/test-wallet/server"
+import { createStore } from "@aztec/kv-store/lmdb"
+import { getPXEConfig } from "@aztec/pxe/server"
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token"
+import { AccountWithSecretKey } from "@aztec/aztec.js/account"
 import { poseidon2Hash, sha256ToField } from "@aztec/foundation/crypto"
 import { waitForTransactionReceipt } from "viem/actions"
 import { privateKeyToAccount } from "viem/accounts"
@@ -40,6 +47,7 @@ import {
   hexToUintArray,
   OrderDataEncoder,
   parseFilledLog,
+  parseResolvedOrderEvm,
 } from "./utils"
 import {
   AZTEC_VERSION,
@@ -92,18 +100,29 @@ const AZTEC_WAIT_TIMEOUT = 120000
 
 export class Bridge {
   azguardClient?: AzguardClient
-  aztecPxe?: PXE
+  aztecNodeUrl?: string
+  aztecPxeStoreDirectory?: string
   aztecKeySalt?: Hex
   aztecSecretKey?: Hex
   beaconApiUrl?: string
   evmPrivateKey?: Hex
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   evmProvider?: any
-  #walletAccountRegistered = false
+  #testWallet?: TestWallet
+  #account?: AccountWithSecretKey
   #aztecGatewayRegistered = false
 
   constructor(configs: BridgeConfigs) {
-    const { azguardClient, aztecPxe, aztecKeySalt, aztecSecretKey, beaconApiUrl, evmPrivateKey, evmProvider } = configs
+    const {
+      azguardClient,
+      aztecNodeUrl,
+      aztecPxeStoreDirectory,
+      aztecKeySalt,
+      aztecSecretKey,
+      beaconApiUrl,
+      evmPrivateKey,
+      evmProvider,
+    } = configs
 
     if (!aztecSecretKey && !aztecKeySalt && !azguardClient) {
       throw new Error("You must specify aztecSecretKey and aztecKeySalt or azguardClient")
@@ -113,20 +132,21 @@ export class Bridge {
       throw new Error("Cannot specify both evmPrivateKey and evmProvider")
     }
 
-    if (azguardClient && aztecSecretKey && aztecKeySalt && aztecPxe) {
-      throw new Error("Cannot specify both aztecSecretKey, aztecKeySalt, aztecPxe and azguardClient")
+    if (azguardClient && aztecSecretKey && aztecKeySalt && aztecNodeUrl) {
+      throw new Error("Cannot specify both aztecSecretKey, aztecKeySalt, aztecNodeUrl and azguardClient")
     }
 
     if ((aztecSecretKey && !aztecKeySalt) || (!aztecSecretKey && aztecKeySalt)) {
       throw new Error("You must specify both aztecSecretKey and aztecKeySalt")
     }
 
-    if (aztecSecretKey && aztecKeySalt && !aztecPxe) {
-      throw new Error("You must specify the aztecPxe when using aztecSecretKey and aztecKeySalt")
+    if (aztecSecretKey && aztecKeySalt && !aztecNodeUrl) {
+      throw new Error("You must specify the aztecNodeUrl when using aztecSecretKey and aztecKeySalt")
     }
 
     this.azguardClient = azguardClient
-    this.aztecPxe = aztecPxe
+    this.aztecNodeUrl = aztecNodeUrl
+    this.aztecPxeStoreDirectory = aztecPxeStoreDirectory
     this.aztecKeySalt = aztecKeySalt
     this.aztecSecretKey = aztecSecretKey
     this.beaconApiUrl = beaconApiUrl
@@ -168,6 +188,7 @@ export class Bridge {
     }
 
     const wallet = await this.#getAztecWallet()
+    const account = await this.#getAztecAccount()
     const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
     const receipt = await gateway.methods
       .claim_private(
@@ -176,7 +197,10 @@ export class Bridge {
         hexToUintArray(log.originData as Hex),
         hexToUintArray(log.fillerData as Hex),
       )
-      .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
+      .send({
+        from: account.getAddress(),
+        fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
+      })
       .wait({
         timeout: AZTEC_WAIT_TIMEOUT,
       })
@@ -278,29 +302,26 @@ export class Bridge {
     const { address, walletClient } = await this.#getEvmWalletClientAndAddress(chainOut)
     const fillerData = padHex(address)
 
-    const accountNonce = await createPublicClient({
+    const publicClient = createPublicClient({
       chain: chainOut as Chain,
       transport: http(),
-    }).getTransactionCount({
-      address: this.evmPrivateKey ? walletClient.account!.address : address,
     })
-    await waitForTransactionReceipt(
-      createClient({
-        chain: chainOut as Chain,
-        transport: http(),
-      }),
-      {
-        hash: await walletClient.writeContract({
-          abi: erc20Abi,
-          account: this.evmPrivateKey ? walletClient.account! : address,
-          address: `0x${orderData.outputToken.slice(26)}`,
-          args: [gatewayOut, orderData.amountOut],
-          chain: chainOut as Chain,
-          functionName: "approve",
-          nonce: accountNonce,
-        }),
-      },
-    )
+
+    // Approve tokens and wait for confirmation
+    const approvalHash = await walletClient.writeContract({
+      abi: erc20Abi,
+      account: this.evmPrivateKey ? walletClient.account! : address,
+      address: `0x${orderData.outputToken.slice(26)}`,
+      args: [gatewayOut, orderData.amountOut],
+      chain: chainOut as Chain,
+      functionName: "approve",
+    })
+    await publicClient.waitForTransactionReceipt({
+      hash: approvalHash,
+      confirmations: 1,
+    })
+
+    // Fill the order
     const orderDataEncoder = new OrderDataEncoder(orderData)
     return await walletClient.writeContract({
       abi: l2Gateway7683Abi,
@@ -313,7 +334,7 @@ export class Bridge {
       ],
       chain: chainOut as Chain,
       functionName: "fill",
-      nonce: accountNonce + 1,
+      // nonce: accountNonce + 1,
     })
   }
 
@@ -376,14 +397,16 @@ export class Bridge {
     }
 
     const wallet = await this.#getAztecWallet()
-    const fillerData = wallet.getAddress().toString()
+    const account = await this.#getAztecAccount()
+    const fillerData = account.getAddress().toString()
 
-    await this.aztecPxe?.registerContract({
-      instance: (await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
-        AztecAddress.fromString(orderData.outputToken),
-      ))!,
-      artifact: TokenContractArtifact,
-    })
+    const tokenInstance = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
+      AztecAddress.fromString(orderData.outputToken),
+    )
+    if (!tokenInstance) {
+      throw new Error(`Token contract instance not found for address ${orderData.outputToken}`)
+    }
+    await wallet.registerContract({ instance: tokenInstance, artifact: TokenContractArtifact })
     const [token, aztecGateway] = await Promise.all([
       TokenContract.at(AztecAddress.fromString(orderData.outputToken), wallet),
       AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet),
@@ -391,22 +414,23 @@ export class Bridge {
 
     let witness
     if (isPrivate) {
-      witness = await wallet.createAuthWit({
+      witness = await account.createAuthWit({
         caller: AztecAddress.fromString(gatewayOut),
         action: token.methods.transfer_to_public(
-          wallet.getAddress(),
+          account.getAddress(),
           AztecAddress.fromString(gatewayOut), // NOTE: private orders must be claimed by the user
           orderData.amountOut,
           orderData.senderNonce,
         ),
-      })
+      } as any)
     } else {
-      ;(
+      await (
         await wallet.setPublicAuthWit(
+          account.getAddress(),
           {
             caller: AztecAddress.fromString(gatewayOut),
             action: token.methods.transfer_in_public(
-              wallet.getAddress(),
+              account.getAddress(),
               AztecAddress.fromString(orderData.recipient),
               orderData.amountOut,
               orderData.senderNonce,
@@ -430,6 +454,7 @@ export class Bridge {
         authWitnesses: witness ? [witness] : [],
       })
       .send({
+        from: account.getAddress(),
         fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
       })
       .wait({
@@ -620,7 +645,9 @@ export class Bridge {
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       return (await gateway.methods[
         type === "forwardRefundToL2" ? "get_order_refund_block_number" : "get_order_settlement_block_number"
-      ](Fr.fromBufferReduce(hexToBuffer(orderId))).simulate()) as bigint
+      ](Fr.fromBufferReduce(hexToBuffer(orderId))).simulate({
+        from: (await this.#getAztecAccount()).getAddress(),
+      })) as bigint
     }
 
     const aztecMessageBlockNumber = await getRefundOrSettlementBlockNumber()
@@ -641,7 +668,13 @@ export class Bridge {
       )
     }
 
-    const [l2ToL1MessageIndex, siblingPath] = await this.aztecPxe!.getL2ToL1MembershipWitness(
+    // TODO: v3 migration - getL2ToL1MembershipWitness not available on AztecNode in v3
+    // This feature needs to be re-implemented using v3 APIs
+    throw new Error("Forward to L2 not yet supported in Aztec v3 - getL2ToL1MembershipWitness API changed")
+
+    /* const wallet = await this.#getAztecWallet()
+    const node = createAztecNodeClient(this.aztecNodeUrl!)
+    const [l2ToL1MessageIndex, siblingPath] = await node.getL2ToL1MembershipWitness(
       parseInt(aztecMessageBlockNumber.toString()),
       l2ToL1MessageHash,
     )
@@ -670,27 +703,49 @@ export class Bridge {
       ],
       chain: chainForwarder,
       functionName: type === "forwardRefundToL2" ? "forwardRefundToL2" : "forwardSettleToL2",
-    })
+    }) */
   }
 
-  async #getAztecWallet() {
-    const secretKey = Fr.fromHexString(this.aztecSecretKey!)
-    const salt = Fr.fromHexString(this.aztecKeySalt!)
-    const signingKey = deriveSigningKey(secretKey)
-    const account = await getSchnorrAccount(this.aztecPxe!, secretKey, signingKey, salt)
-    if (!this.#walletAccountRegistered) {
-      await this.aztecPxe?.registerAccount(secretKey, (await account.getCompleteAddress()).partialAddress)
-      await this.aztecPxe?.registerContract({
-        instance: account.getInstance(),
-        artifact: SchnorrAccountContractArtifact,
+  async #getAztecWallet(): Promise<TestWallet> {
+    if (!this.#testWallet) {
+      const node = createAztecNodeClient(this.aztecNodeUrl!)
+
+      const fullConfig = {
+        ...getPXEConfig(),
+        l1Contracts: await node.getL1ContractAddresses(),
+        proverEnabled: false,
+      }
+
+      const store = await createStore(this.aztecPxeStoreDirectory || "aztec-pxe", {
+        dataDirectory: "store",
+        dataStoreMapSizeKb: 1e6,
       })
-      await this.aztecPxe?.registerContract({
-        instance: await getSponsoredFPCInstance(),
+
+      this.#testWallet = await TestWallet.create(node, fullConfig, { store, useLogSuffix: true })
+
+      // Register FPC contract
+      const fpcInstance = await getSponsoredFPCInstance()
+      await this.#testWallet.registerContract({
+        instance: fpcInstance,
         artifact: SponsoredFPCContractArtifact,
       })
-      this.#walletAccountRegistered = true
     }
-    return await account.getWallet()
+
+    return this.#testWallet
+  }
+
+  async #getAztecAccount(): Promise<AccountWithSecretKey> {
+    if (!this.#account) {
+      const wallet = await this.#getAztecWallet()
+      const secretKey = Fr.fromHexString(this.aztecSecretKey!)
+      const salt = Fr.fromHexString(this.aztecKeySalt!)
+
+      const accountContract = await wallet.createSchnorrAccount(secretKey, salt)
+      // Don't deploy - assume account is already deployed
+      this.#account = await accountContract.getAccount()
+    }
+
+    return this.#account
   }
 
   #getChainInAndOutByChainIds(
@@ -778,7 +833,15 @@ export class Bridge {
     const { logs } = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getPublicLogs({
       contractAddress: AztecAddress.fromString(gateway),
     })
-    const parsedLogs = logs.map(({ log }) => parseFilledLog(log.fields))
+    console.log("Fetched logs:", logs.length)
+    console.log("Looking for orderId:", orderId)
+
+    // Filter for Filled events (they have 13 fields: fields[0-12])
+    // Open events have 13 fields but different structure
+    const filledLogs = logs.filter(({ log }) => log.fields.length === 13 && log.fields[11] !== undefined)
+    console.log("Filled logs count:", filledLogs.length)
+
+    const parsedLogs = filledLogs.map(({ log }) => parseFilledLog(log.fields))
     return parsedLogs.find((log) => log.orderId === orderId)
   }
 
@@ -883,9 +946,12 @@ export class Bridge {
     }
 
     const wallet = await this.#getAztecWallet!()
+    const account = await this.#getAztecAccount()
     while (true) {
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
-      const status = parseInt(await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate())
+      const status = parseInt(
+        await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate({ from: account.getAddress() }),
+      )
       if (status === FILLED_PRIVATELY || status === FILLED) {
         onOrderFilled?.({ orderId })
         return
@@ -907,12 +973,14 @@ export class Bridge {
           },
         ])
       } else {
-        await this.aztecPxe?.registerContract({
-          instance: (await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
-            AztecAddress.fromString(gateway),
-          ))!,
-          artifact: AztecGateway7683ContractArtifact,
-        })
+        const wallet = await this.#getAztecWallet()
+        const instance = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
+          AztecAddress.fromString(gateway),
+        )
+        if (!instance) {
+          throw new Error(`Contract instance not found for gateway address ${gateway}`)
+        }
+        await wallet.registerContract({ instance, artifact: AztecGateway7683Contract.artifact })
       }
       this.#aztecGatewayRegistered = true
     }
@@ -1005,37 +1073,40 @@ export class Bridge {
       orderOpenedReceipt = await waitForReceipt(orderOpenedTxHash)
     } else {
       const wallet = await this.#getAztecWallet()
-      await this.aztecPxe?.registerContract({
-        instance: (await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
-          AztecAddress.fromString(tokenIn),
-        ))!,
-        artifact: TokenContractArtifact,
-      })
+      const account = await this.#getAztecAccount()
+      const tokenInstance = await createAztecNodeClient(aztecSepolia.rpcUrls.default.http[0]).getContract(
+        AztecAddress.fromString(tokenIn),
+      )
+      if (!tokenInstance) {
+        throw new Error(`Token contract instance not found for address ${tokenIn}`)
+      }
+      await wallet.registerContract({ instance: tokenInstance, artifact: TokenContractArtifact })
       const orderDataEncoder = new OrderDataEncoder({
         ...baseOrderData,
-        sender: isPrivate ? PRIVATE_SENDER : wallet.getAddress().toString(),
+        sender: isPrivate ? PRIVATE_SENDER : account.getAddress().toString(),
       })
 
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
       const token = await TokenContract.at(AztecAddress.fromString(tokenIn), wallet)
       let witness
       if (isPrivate) {
-        witness = await wallet.createAuthWit({
+        witness = await account.createAuthWit({
           caller: AztecAddress.fromString(gatewayIn),
           action: token.methods.transfer_to_public(
-            wallet.getAddress(),
+            account.getAddress(),
             AztecAddress.fromString(gatewayIn),
             amountIn,
             nonce,
           ),
-        })
+        } as any)
       } else {
         await (
           await wallet.setPublicAuthWit(
+            account.getAddress(),
             {
               caller: AztecAddress.fromString(gatewayIn),
               action: token.methods.transfer_in_public(
-                wallet.getAddress(),
+                account.getAddress(),
                 AztecAddress.fromString(gatewayIn),
                 amountIn,
                 nonce,
@@ -1058,7 +1129,10 @@ export class Bridge {
         .with({
           authWitnesses: witness ? [witness] : [],
         })
-        .send({ fee: { paymentMethod: await getSponsporedFeePaymentMethod() } })
+        .send({
+          from: account.getAddress(),
+          fee: { paymentMethod: await getSponsporedFeePaymentMethod() },
+        })
         .wait({
           timeout: AZTEC_WAIT_TIMEOUT,
         })
@@ -1109,12 +1183,26 @@ export class Bridge {
       chain: chainIn as Chain,
       transport: http(),
     })
-    const accountNonce = await createPublicClient({
+    const publicClient = createPublicClient({
       chain: chainIn as Chain,
       transport: http(),
-    }).getTransactionCount({
-      address: this.evmPrivateKey ? walletClient.account!.address : sender,
     })
+    const accountAddress = this.evmPrivateKey ? walletClient.account!.address : sender
+
+    // Check token balance
+    const balance = await publicClient.readContract({
+      abi: erc20Abi,
+      address: tokenIn,
+      functionName: "balanceOf",
+      args: [accountAddress],
+    })
+    if (balance < amountIn) {
+      throw new Error(
+        `Insufficient token balance: have ${balance}, need ${amountIn} for token ${tokenIn} on chain ${chainIdIn}`,
+      )
+    }
+
+    // Approve tokens for gateway
     let txHash = await walletClient.writeContract({
       abi: erc20Abi,
       account: this.evmPrivateKey ? walletClient.account! : sender,
@@ -1122,9 +1210,30 @@ export class Bridge {
       args: [gatewayIn, amountIn],
       chain: chainIn as Chain,
       functionName: "approve",
-      nonce: accountNonce,
     })
-    await waitForTransactionReceipt(evmClient, { hash: txHash })
+    await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 5 })
+
+    // Verify approval was successful with retry logic
+    let allowance = 0n
+    const maxAllowanceRetries = 3
+    for (let i = 0; i < maxAllowanceRetries; i++) {
+      allowance = await publicClient.readContract({
+        abi: erc20Abi,
+        address: tokenIn,
+        functionName: "allowance",
+        args: [accountAddress, gatewayIn],
+      })
+      if (allowance >= amountIn) {
+        break
+      }
+      if (i < maxAllowanceRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5000))
+      }
+    }
+    if (allowance < amountIn) {
+      throw new Error(`Token approval failed: allowance is ${allowance}, need ${amountIn} for gateway ${gatewayIn}`)
+    }
+
     txHash = await walletClient.writeContract({
       abi: l2Gateway7683Abi,
       account: this.evmPrivateKey ? walletClient.account! : sender,
@@ -1138,9 +1247,8 @@ export class Bridge {
       ],
       chain: chainIn as Chain,
       functionName: "open",
-      nonce: accountNonce + 1,
     })
-    const receipt = await waitForTransactionReceipt(evmClient, { hash: txHash! })
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash! })
     const { orderId, resolvedOrder } = getResolvedOrderAndOrderIdEvmByReceipt(receipt)
 
     if (secret)
@@ -1200,8 +1308,11 @@ export class Bridge {
       status = parseInt(BigInt((response as OkResult<SimulateViewsResult>).result.encoded[0][0]).toString())
     } else {
       const wallet = await this.#getAztecWallet()
+      const account = await this.#getAztecAccount()
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayIn), wallet)
-      status = parseInt(await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate())
+      status = parseInt(
+        await gateway.methods.get_order_status(Fr.fromString(orderId)).simulate({ from: account.getAddress() }),
+      )
     }
 
     if (status !== OPENED) throw new Error("Cannot find an opened order for the specified order id")
@@ -1233,7 +1344,7 @@ export class Bridge {
     const { gatewayIn, gatewayOut } = this.#getGatewaysByChainIds(chainIdIn, chainIdOut)
     const chainIn = this.#getChainByChainId(chainIdIn)
 
-    const order = (await createPublicClient({
+    const [orderType, orderData] = (await createPublicClient({
       chain: chainIn as Chain,
       transport: http(),
     }).readContract({
@@ -1241,17 +1352,44 @@ export class Bridge {
       abi: l2Gateway7683Abi,
       functionName: "openOrders",
       args: [orderId],
-    })) as Hex
-    if (!order || order === "0x") throw new Error("Cannot find an opened order for the specified order id")
-    // NOTE opened on EVM -> trigger refund on Aztec
+    })) as [Hex, Hex]
 
-    const [, orderData] = decodeAbiParameters(
-      [
-        { type: "bytes32", name: "orderType" },
-        { type: "bytes", name: "orderData" },
-      ],
-      order,
-    )
+    // origin data to send to Aztec gateway refund
+    let originDataHex: Hex | undefined = orderData
+
+    // If openOrders does not include the inner originData bytes (sometimes empty), try to recover
+    // the origin data from EVM Open event logs as a fallback.
+    // Check for empty/invalid hex: "0x", "x", or length <= 2
+    if (!originDataHex || originDataHex.length <= 2) {
+      const evmPublicClient = createPublicClient({
+        chain: chainIn as Chain,
+        transport: http(),
+      })
+
+      // Fetch Open events for this order ID
+      const currentBlock = await evmPublicClient.getBlockNumber()
+      const openEvent = l2Gateway7683Abi.find((el) => el.type === "event" && el.name === "Open") as AbiEvent
+      const [log] = await evmPublicClient.getLogs({
+        address: gatewayIn,
+        event: openEvent,
+        args: {
+          orderId,
+        },
+        fromBlock: currentBlock - 1000n, // Look back 1000 blocks
+        toBlock: currentBlock,
+      })
+
+      if (log) {
+        const resolvedOrder = parseResolvedOrderEvm(log)
+        if (resolvedOrder.fillInstructions?.[0]?.originData) {
+          originDataHex = resolvedOrder.fillInstructions[0].originData as Hex
+        }
+      }
+    }
+
+    if (!originDataHex || originDataHex.length <= 2)
+      throw new Error("Cannot find an opened order (origin data) for the specified order id")
+    // NOTE opened on EVM -> trigger refund on Aztec
 
     await this.#maybeRegisterAztecGateway()
 
@@ -1266,7 +1404,7 @@ export class Bridge {
               kind: "call",
               contract: gatewayOut,
               method: "refund",
-              args: [hexToUintArray(orderId), hexToUintArray(orderData)],
+              args: [hexToUintArray(orderId), hexToUintArray(originDataHex as Hex)],
             },
           ],
         },
@@ -1275,10 +1413,12 @@ export class Bridge {
       return (response as OkResult<SendTransactionResult>).result as Hex
     } else {
       const wallet = await this.#getAztecWallet()
+      const account = await this.#getAztecAccount()
       const gateway = await AztecGateway7683Contract.at(AztecAddress.fromString(gatewayOut), wallet)
       const receipt = await gateway.methods
-        .refund(hexToUintArray(orderId), hexToUintArray(orderData))
+        .refund(hexToUintArray(orderId), hexToUintArray(originDataHex as Hex))
         .send({
+          from: account.getAddress(),
           fee: {
             paymentMethod: await getSponsporedFeePaymentMethod(),
           },
