@@ -40,17 +40,9 @@ The most important options are:
 | `OP_STACK_ANCHOR_REGISTRY_ADDRESS`, `AZTEC_ROLLUP_CONTRACT_L1_ADDRESS` | Used when forwarding settlements to Aztec/L2. Optional in sandbox. |
 | `AZTEC_SANDBOX` | Set to `true` when running against the sandbox so settlement forwarding skips the rollup proof requirement. |
 
-## Sync Contract Artifacts
+## Contract Artifacts
 
-The filler embeds the Aztec gateway artifact generated in `packages/aztec/aztec_gateway_7683`. Whenever that project is rebuilt, copy the updated files into the filler before compiling:
-
-```bash
-# from packages/filler
-cp ../aztec/aztec_gateway_7683/src/artifacts/AztecGateway7683.ts src/artifacts/AztecGateway7683/
-cp ../aztec/aztec_gateway_7683/target/aztec_gateway_7683-AztecGateway7683.json src/artifacts/AztecGateway7683/
-```
-
-These copies keep the filler’s TypeScript bindings and bytecode in sync with the deployed Aztec gateway contract.
+The filler imports artifacts directly from `packages/aztec/aztec_gateway_7683/src/artifacts/` to ensure it always uses the same artifacts as the deployment script. No manual syncing is required - the filler will automatically use the latest compiled artifacts from the aztec package.
 
 ## Build and Run
 

@@ -11,6 +11,7 @@ interface WatcherConfigs {
   eventName: string
   watchIntervalTimeMs: number
   onLogs: (logs: Log[]) => Promise<void>
+  silent?: boolean
 }
 
 class EvmWatcher {
@@ -22,6 +23,7 @@ class EvmWatcher {
   eventName: string
   private lastBlock: bigint
   private watchIntervalTimeMs: number
+  private silent: boolean
 
   constructor(configs: WatcherConfigs) {
     this.logger = configs.logger.child({ service: configs.service })
@@ -31,6 +33,7 @@ class EvmWatcher {
     this.eventName = configs.eventName
     this.onLogs = configs.onLogs
     this.watchIntervalTimeMs = configs.watchIntervalTimeMs
+    this.silent = configs.silent ?? false
 
     this.lastBlock = 0n
   }
@@ -55,9 +58,11 @@ class EvmWatcher {
       const toBlock = currentBlock
       this.lastBlock = currentBlock
 
-      this.logger.info(
-        `looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on ${this.client.chain!.name} ...`,
-      )
+      if (!this.silent) {
+        this.logger.info(
+          `looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on ${this.client.chain!.name} ...`,
+        )
+      }
 
       const filter = await this.client.createContractEventFilter({
         address: this.contractAddress,
@@ -70,7 +75,7 @@ class EvmWatcher {
 
       if (logs.length) {
         this.logger.info(
-          `Detected ${logs.length} new ${this.eventName} events on ${this.client.chain!.name}. Processing them ...`,
+          `Detected ${logs.length} new ${this.eventName} events on ${this.client.chain!.name} (blocks ${fromBlock}-${toBlock}). Processing them ...`,
         )
         await this.onLogs(logs)
       }

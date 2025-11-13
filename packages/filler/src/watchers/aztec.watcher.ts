@@ -16,6 +16,7 @@ interface WatcherConfigs {
   eventName: string
   watchIntervalTimeMs: number
   onLogs: (logs: ResolvedOrder[]) => Promise<void>
+  silent?: boolean
 }
 
 class AztecWatcher {
@@ -27,6 +28,7 @@ class AztecWatcher {
   eventName: string
   private lastBlock: number
   private watchIntervalTimeMs: number
+  private silent: boolean
 
   constructor(configs: WatcherConfigs) {
     this.logger = configs.logger.child({ service: configs.service })
@@ -36,6 +38,7 @@ class AztecWatcher {
     this.eventName = configs.eventName
     this.onLogs = configs.onLogs
     this.watchIntervalTimeMs = configs.watchIntervalTimeMs
+    this.silent = configs.silent ?? false
 
     this.lastBlock = 0
   }
@@ -61,11 +64,18 @@ class AztecWatcher {
       this.lastBlock = currentBlock
 
       if (fromBlock === toBlock) {
-        this.logger.info(`no new blocks detected. currentBlock is ${currentBlock}. skipping ...`)
+        if (!this.silent) {
+          this.logger.info(`no new blocks detected. currentBlock is ${currentBlock}. skipping ...`)
+        }
         return
       }
 
-      this.logger.info(`looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on Aztec ...`)
+      if (!this.silent) {
+        this.logger.info(
+          `looking for ${this.eventName} events from block ${fromBlock} to block ${toBlock} on Aztec ...`,
+        )
+      }
+
       const { logs } = await this.node.getPublicLogs({
         fromBlock,
         toBlock: toBlock,
@@ -100,7 +110,9 @@ class AztecWatcher {
         })
 
       if (logs.length) {
-        this.logger.info(`Detected ${joinedLogs.length} new ${this.eventName} events on Aztec. Processing them ...`)
+        this.logger.info(
+          `Detected ${joinedLogs.length} new ${this.eventName} events on Aztec (blocks ${fromBlock}-${toBlock}). Processing them ...`,
+        )
         await this.onLogs(joinedLogs)
       }
     } catch (error) {

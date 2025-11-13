@@ -60,6 +60,9 @@ export const config = {
 export async function updateEnvFile(updates: Record<string, string>) {
   const fs = await import("fs")
   const path = await import("path")
+  const { createLogger } = await import("@aztec/foundation/log")
+  const logger = createLogger("update-env")
+
   const envPath = path.join(process.cwd(), ".env")
 
   let envContent = ""
@@ -71,10 +74,17 @@ export async function updateEnvFile(updates: Record<string, string>) {
     const regex = new RegExp(`^${key}=.*$`, "m")
     if (regex.test(envContent)) {
       envContent = envContent.replace(regex, `${key}=${value}`)
+      logger.info(`Updated ${key} in .env`)
     } else {
-      envContent += `\n${key}=${value}`
+      // Add to the end, ensuring we have a newline before it
+      if (envContent && !envContent.endsWith("\n")) {
+        envContent += "\n"
+      }
+      envContent += `${key}=${value}\n`
+      logger.info(`Added ${key} to .env`)
     }
   }
 
   fs.writeFileSync(envPath, envContent)
+  logger.info(`✅ .env file updated successfully`)
 }

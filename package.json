@@ -22,7 +22,8 @@
     "postpublish": "pinst --enable",
     "deploy:all": "bun scripts/deploy/deploy-all.ts",
     "mint:aztec": "bun scripts/mint/mint-aztec.ts",
-    "mint:evm": "bun scripts/mint/mint-evm.ts"
+    "mint:evm": "bun scripts/mint/mint-evm.ts",
+    "filler": "bun scripts/run-filler.ts"
   },
   "dependencies": {
     "@aztec/accounts": "3.0.0-devnet.2",
